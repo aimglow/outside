@@ -7,7 +7,11 @@ outside は 全 project が module として取り込む共通部品である。
 ## git の流れ
 
 - GitHub だけで運用する。ccark の deploy の流れ (便・gate・prepush-gate・cd-native) は使わない。
-- branch は main の 1 本。main へ直に commit して push する。
+- 残る branch は main の 1 本。PR も CI も通さず main へ入れる。
+- 編集は 作業用の branch を 別の作業木 (git worktree) に切って行う。main の作業木の中の file は 直に編集しない。
+  手順 = `git worktree add ../w-<名前> -b work/<名前>` → 編集して commit →
+  `git push origin HEAD:main` (早送りだけ。早送りできない時は main を取り込んで やり直す) →
+  main の作業木で `git pull --ff-only`。作業用の branch は GitHub へ push しない。
 - push の前に 手元で 全部の test と lint を回す。通らない物を push しない。
 - 版は git の tag で切る (`vMAJOR.MINOR.PATCH`、Go の module は `go/vMAJOR.MINOR.PATCH`)。
   壊れた版を tag にしない。tag は動かさない (直しは 次の版)。
