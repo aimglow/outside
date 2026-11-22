@@ -22,14 +22,18 @@ outside は 全 project が module として取り込む共通部品である。
 
 ## 使われ方
 
-- 利用する project は この repo を module として取り込む (Go = module の版 / TypeScript・Dart = git の tag)。
+- 利用する project は この repo を 版を固定した module として取り込む。
 - project の code は 外を直に呼ばず この部品の口 (port) を通す。
 - 版は tag で固定して使う。main を追わない。全 project が 同じ版を使う。
-- project の中に置いた この部品の写しは project の中で編集しない。直すのは この repo だけ。
-- project に写すのは 実装と mock だけ。この部品の test は写さない:
-  TypeScript = `ts/src/` (Nx の共有 library として置き `test` の target を定義しない) /
-  Dart = `dart/lib/` と `pubspec.yaml` / Go = module として取り込む (project の `go test` は 依存の module の test を回さない)。
-- 写しには 写した版を 1 行で記録する。
+- project に入れた この部品は project の中で編集しない。直すのは この repo だけ。
+- project に入れるのは 実装と mock だけ。この部品の test は project で回さない。
+
+### project への組み込み方と 版を上げた時の適用の手順
+
+この節は kifune で実物を確かめた後に書く。確かめる前の手順を ここに書かない。
+確かめる事 = (1) 言語ごとの取り込み (Go の module / TypeScript を Nx の共有 library として / Dart の package) が
+tag の中身と一致して入る (2) この部品の test が project の検査で走らない (3) 版を上げた時に 同じ手順で入れ替わり
+project の検査が 変わった物に依る分だけ回る (4) image の build の場所から取り込める (5) 外を直に呼ぶ code を lint が落とす。
 
 ## 部品の足し方
 
