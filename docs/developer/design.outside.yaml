@@ -12,9 +12,10 @@ purpose: >
 scope:
   in:
     - 全 project (ccark / amatelas / kifune / daikokuten / demaetei) の BE・ツール・FE・mobile
-    - Go の module、TypeScript の library (Nx・Next.js・Angular)、Dart の package (Flutter)
+    - Go の module、TypeScript の library (Nx・Next.js・Angular)、Dart の package (Flutter の mobile と desktop)
     - 各 stack の lint の設定 (外を直に呼ぶ code を build で落とす)
   out:
+    - Flutter の web (作らない。web は Angular で作る。Dart の package は web の build に対応しない)
     - 目的に対して手段が妥当かの判断 (設計の review が持つ。lint では判定しない)
     - project 固有の業務の処理
 
