@@ -1,0 +1,14 @@
+name: outside
+description: 外 (時計・通信・保存・設定) を触る口の共通部品。
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  http: ^1.2.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0
