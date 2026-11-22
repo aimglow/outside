@@ -140,11 +140,15 @@ tool_entry:
 
 lint:
   go:
-    tool: golangci-lint (forbidigo・depguard)
-    forbid: [time.Now, time.Since, time.Sleep, os.Getenv, os.LookupEnv, os.Environ, os.Hostname,
-             exec.Command, exec.CommandContext, os.TempDir, os.MkdirTemp, os.CreateTemp,
-             os.ReadFile, os.WriteFile, os.Open, os.ReadDir]
-    except: この部品の real の package
+    tool: golangci-lint 2.x (forbidigo)
+    config: lint/go/golangci.yml (利用する project が取り込む)
+    forbid: [time.Now, time.Since, time.Until, time.Sleep, time.After, time.Tick, time.NewTimer, time.NewTicker,
+             os.Getenv, os.LookupEnv, os.Environ, os.Setenv, os.Unsetenv, os.Hostname,
+             exec.Command, exec.CommandContext, exec.LookPath,
+             os.TempDir, os.MkdirTemp, os.CreateTemp,
+             os.ReadFile, os.WriteFile, os.Open, os.OpenFile, os.Create, os.ReadDir, os.Stat, os.Lstat,
+             os.Remove, os.RemoveAll, os.Mkdir, os.MkdirAll, os.Rename]
+    except: この部品の real (利用する project では outside は依存の module なので lint の対象に入らない)
   typescript:
     tool: ESLint (no-restricted-syntax・no-restricted-globals・no-restricted-imports)
     forbid: [Date.now, "new Date() (引数なし)", setTimeout, setInterval, process.env, fetch,

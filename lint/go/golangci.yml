@@ -1,0 +1,21 @@
+# outside の lint (Go)。利用する project は この file を取り込み 外を直に呼ぶ code を落とす。
+# 禁じる呼び出しの正本 = docs/developer/design.outside.yaml の lint.go。外は outside の口を通す。
+version: "2"
+linters:
+  default: none
+  enable:
+    - forbidigo
+  settings:
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^time\.(Now|Since|Until|Sleep|After|Tick|NewTimer|NewTicker)$
+          msg: 時計は outside の Clock を通す
+        - pattern: ^os\.(Getenv|LookupEnv|Environ|Setenv|Unsetenv|Hostname)$
+          msg: 環境と機体の値は outside の Env を通す
+        - pattern: ^exec\.(Command|CommandContext|LookPath)$
+          msg: 子 process は outside の Proc を通す
+        - pattern: ^os\.(TempDir|MkdirTemp|CreateTemp)$
+          msg: 作業場は outside の Workdir を通す (system の /tmp を前提にしない)
+        - pattern: ^os\.(ReadFile|WriteFile|Open|OpenFile|Create|ReadDir|Stat|Lstat|Remove|RemoveAll|Mkdir|MkdirAll|Rename)$
+          msg: file は outside の FS を通す
