@@ -1,0 +1,183 @@
+id: DSG-outside-001
+title: outside — 外を触る口の共通部品
+status: draft
+owner: aimglow
+repo: github.com/aimglow/outside
+
+purpose: >
+  application とツールが 外 (時計・環境変数・file・git・子 process・作業場・通信・保存) を触る場所を
+  この部品 1 つに限る。処理の中身は 値を受けて値を返す形になり、test は 口に偽物を渡すだけで
+  結果が決まる。機体が変わっても・日付が変わっても 同じ入力なら同じ結果になる。
+
+scope:
+  in:
+    - 全 project (ccark / amatelas / kifune / daikokuten / demaetei) の BE・ツール・FE・mobile
+    - Go の module、TypeScript の library (Nx・Next.js・Angular)、Dart の package (Flutter)
+    - 各 stack の lint の設定 (外を直に呼ぶ code を build で落とす)
+  out:
+    - 目的に対して手段が妥当かの判断 (設計の review が持つ。lint では判定しない)
+    - project 固有の業務の処理
+
+terms:
+  outside: 処理の入力として宣言されていない物。時計・環境変数・file system・git・子 process・機体の値・通信・browser の保存。
+  port: outside を触るための口。1 種類の外につき 1 つ。
+  real: port の本物の実装。この部品の中だけに在る。
+  fake: port の test 用の実装。渡した値だけで振る舞いが決まる。
+  set: 1 つの処理に渡す port の組。
+  tool-environment: ツールが動く前提として宣言する環境 (要るツールと版・git の木の中か・作業場)。
+
+requirements:
+  - id: REQ-OUT-ONLY
+    text: 外を直に呼んでよいのは この部品の real だけ。project の code は port を通す。
+    check: lint (REQ-OUT-LINT)。
+  - id: REQ-OUT-INJECT
+    text: 処理は 自分が使う port を 引数か構造体で受け取る。package の変数や global から取らない。
+  - id: REQ-OUT-FAKE
+    text: >
+      fake は 渡した値だけで振る舞いが決まる。実の時計・機体・file system を読まない。
+      fake が呼ばれた内容 (何を・何回) は test から読める。
+  - id: REQ-OUT-ONE-FAKE
+    text: 口 1 つにつき fake は 1 つ。この repo が持つ。利用する project は 自分で偽物を作らない。
+  - id: REQ-OUT-CONTRACT
+    text: >
+      real と fake は 同じ契約の test を通す (同じ入力に 同じ振る舞い)。
+      片方だけが通る振る舞いを残さない。
+  - id: REQ-OUT-REAL-TESTED-HERE
+    text: >
+      real を実物で確かめる test は この repo の中だけに置く。その test は 自分で作った物だけを触り
+      機体に元から在る物を読まない。利用する project の test は 実物を触らず fake を渡す。
+  - id: REQ-OUT-TOOL-ENV
+    text: >
+      ツールは 入口で tool-environment の宣言を確かめる。宣言に合わない環境では
+      何が足りないかを名乗って 誤りで終わる。宣言の外で 別の動きをしない。
+  - id: REQ-OUT-WORKDIR
+    text: >
+      作業場は 宣言した置き場の下に作る。system の一時置き場 (/tmp・os.TempDir・MkdirTemp(""))
+      を使わない。宣言した置き場が無ければ 誤りで終わる。
+  - id: REQ-OUT-NO-ABSPATH
+    text: repo の外の絶対 path を code と test に書かない。置き場は tool-environment の宣言から受け取る。
+  - id: REQ-OUT-SECRET
+    text: secret の値を 作業場へ写さない。secret を読む口は 値を返すだけで 置き場を作らない。
+  - id: REQ-OUT-PARITY
+    text: port の名前と意味は Go・TypeScript・Dart で同じ。この設計書の ports の節が唯一の定義。
+  - id: REQ-OUT-SAME-VERSION
+    text: 全 project は 同じ版を使う。版の食い違いは 名指す。
+  - id: REQ-OUT-LINT
+    text: >
+      各 stack の lint の設定を この repo が持ち、project は それを取り込む。
+      禁じる呼び出しは lint の節の一覧。部品の real の中だけ 例外。
+
+ports:
+  backend_and_tools:
+    - name: Clock
+      does: 今の時刻を返す。待つ。
+      methods: [Now, Sleep]
+      fake: 決めた時刻から始まり Advance で進む。Sleep は 実時間を待たず 時刻を進める。
+    - name: Env
+      does: 環境変数を名前で読む。
+      methods: [Lookup]
+      fake: 渡した表だけを返す。表に無い名前は 無い と返す。
+    - name: FS
+      does: 宣言した根の下の file を読む・書く・一覧する。
+      methods: [ReadFile, WriteFile, ReadDir, Stat, Remove]
+      rule: 根の外の path は 誤り。
+      fake: memory の上の木。
+    - name: Git
+      does: 宣言した木の git の問いに答える (head の sha・追跡下の一覧・merge-base・差分の file)。
+      methods: [Head, ListFiles, MergeBase, DiffNames, IsAncestor]
+      fake: 渡した値を返す。偽の repo を作らない。
+    - name: Proc
+      does: 宣言した名前の program を起こし 結果を返す。
+      methods: [Run]
+      rule: tool-environment に無い program は 誤り。
+      fake: 起こされた引数を記録し 決めた結果を返す。
+    - name: Workdir
+      does: 宣言した置き場の下に 作業場を作り 終わりに消す。
+      methods: [New, Path, Cleanup]
+      fake: memory の上の木か test が渡した dir。
+  frontend_and_mobile:
+    - name: Clock
+      does: 今の時刻を返す。timer を掛ける。
+      methods: [now, setTimeout, clearTimeout]
+      fake: 決めた時刻から始まり advance で進む。
+    - name: Http
+      does: 通信を送り 応答を返す。
+      methods: [request]
+      fake: 決めた応答を返し 送られた内容を記録する。
+    - name: Storage
+      does: browser か端末の保存を読む・書く。
+      methods: [get, set, remove]
+      fake: memory の上の表。test ごとに空から始まる。
+    - name: Config
+      does: build 時と実行時の設定の値を返す。
+      methods: [get]
+      fake: 渡した表だけを返す。
+
+tool_entry:
+  name: RunTool
+  does:
+    - tool-environment の宣言を読む
+    - 宣言を確かめる (要る program と版・git の木の中か・作業場の置き場)
+    - 合わなければ 足りない物を名乗って 誤りで終わる (exit の番号は 判定不能を 合否と分ける)
+    - 合えば set (real) を作って 処理へ渡す
+  declaration:
+    format: TOML
+    file: outside.toml (ツールの dir)
+    fields:
+      requires_git_worktree: bool
+      programs: 名前と版の表
+      workdir_root: 作業場の置き場 (repo の中の相対 path か 環境変数の名前)
+      env: 読んでよい環境変数の名前の一覧
+      fs_roots: 読み書きしてよい根の一覧 (repo の中の相対 path)
+
+lint:
+  go:
+    tool: golangci-lint (forbidigo・depguard)
+    forbid: [time.Now, time.Since, time.Sleep, os.Getenv, os.LookupEnv, os.Environ, os.Hostname,
+             exec.Command, exec.CommandContext, os.TempDir, os.MkdirTemp, os.CreateTemp,
+             os.ReadFile, os.WriteFile, os.Open, os.ReadDir]
+    except: この部品の real の package
+  typescript:
+    tool: ESLint (no-restricted-syntax・no-restricted-globals・no-restricted-imports)
+    forbid: [Date.now, "new Date() (引数なし)", setTimeout, setInterval, process.env, fetch,
+             localStorage, sessionStorage, "import fs", "import child_process"]
+    except: この部品の real の module
+  dart:
+    tool: analyzer の lint か custom_lint
+    forbid: [DateTime.now, Platform.environment, "dart:io の File・Process の直呼び"]
+    except: この部品の real の library
+    undecided: Dart の lint で どこまで止められるかは 実物で確かめていない。確かめた結果で この節を直す。
+
+layout:
+  go: go/            # module = github.com/aimglow/outside/go、偽物 = go/outsidefake
+  typescript: ts/    # package = @aimglow/outside、偽物 = @aimglow/outside/fake
+  dart: dart/        # package = outside
+  lint: lint/        # stack ごとの設定
+  docs: docs/developer/
+
+versioning:
+  scheme: 版は git の tag (vMAJOR.MINOR.PATCH)。Go の module は go/vMAJOR.MINOR.PATCH。
+  rule:
+    - port の method を消す・意味を変える = MAJOR
+    - port か method を足す = MINOR
+    - 振る舞いを変えない直し = PATCH
+  consume: Go は module の版、TypeScript と Dart は git の tag を指す。有料の registry を使わない。
+
+delivery:
+  flow: main へ直に commit して push する。この repo は CI・便・gate を持たない (持ち主の決め 2026-11-23)。
+  consequence: 確かめは commit の前に 手元で回す。壊れた版を tag にしない。
+
+adoption:
+  order:
+    - kifune (Go。time.Now を直に書くと build が落ちる事を 1 回 確かめる)
+    - demaetei・amatelas・daikokuten (Go、次に TypeScript・Dart)
+    - ccark
+  per_package_done:
+    - 外を直に呼ぶ code が無い (lint が通る)
+    - test が fake だけで回る
+    - 台帳に記帳でき cache の確かめで その package が回らない
+
+open:
+  - Dart の lint の実力 (lint の節の undecided)
+  - Go の FS の method の最小の組 (kifune の付け替えで 足りない物が出たら MINOR で足す)
+  - 全 project の版の食い違いを名指す口を どこに置くか

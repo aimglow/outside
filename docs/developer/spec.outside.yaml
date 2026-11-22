@@ -1,0 +1,87 @@
+id: SPEC-outside-001
+title: outside のテスト仕様
+design: DSG-outside-001
+status: draft
+
+note: >
+  観点は 要件ごとに 確かめる振る舞い・渡す入力・偽物にする物 を書く。
+  この部品の real の test だけが 実物 (実の時計・実の file・実の git) を触る。その時も
+  test が自分で作った物だけを触り 機体に元から在る物を読まない。
+
+cases:
+  - id: TC-OUT-CLOCK-FAKE
+    requirement: REQ-OUT-FAKE
+    behavior: fake の Clock は 決めた時刻を返し Advance した分だけ進む。Sleep は 実時間を待たない。
+    input: 開始の時刻・Advance の長さ・Sleep の長さ
+    fakes: なし (fake そのものが対象)
+    expect: Now の値が 入力から計算した値に一致する。test の所要は 実時間に依らない。
+
+  - id: TC-OUT-ENV-FAKE
+    requirement: REQ-OUT-FAKE
+    behavior: fake の Env は 渡した表の値だけを返す。
+    input: 表・引く名前
+    expect: 表に在る名前は値、無い名前は 無い。機体の環境変数は 結果に現れない。
+
+  - id: TC-OUT-FS-ROOT
+    requirement: REQ-OUT-ONLY
+    behavior: FS は 宣言した根の外の path を 誤りで返す。
+    input: 根・根の中の path・根の外へ出る path (.. と 絶対 path)
+    fakes: fake の FS
+    expect: 根の中は読める。外へ出る path は 誤り (読まない)。
+
+  - id: TC-OUT-GIT-FAKE
+    requirement: REQ-OUT-FAKE
+    behavior: fake の Git は 渡した head・一覧・差分を返す。repo を作らない。
+    input: head の sha・追跡下の一覧・差分の file
+    expect: 返る値が入力に一致する。file system に何も作られない。
+
+  - id: TC-OUT-PROC-DECLARED
+    requirement: REQ-OUT-TOOL-ENV
+    behavior: Proc は 宣言に無い program を起こさず 誤りで返す。
+    input: 宣言の programs・起こす名前
+    fakes: fake の Proc
+    expect: 宣言に在る名前は 記録されて結果が返る。無い名前は 誤り。
+
+  - id: TC-OUT-WORKDIR-DECLARED
+    requirement: REQ-OUT-WORKDIR
+    behavior: Workdir は 宣言した置き場の下にだけ作る。置き場が無ければ 誤り。
+    input: 置き場が在る宣言・置き場が無い宣言
+    expect: 作られた path は 置き場の下。置き場が無い時は 誤りで system の一時置き場に作らない。
+
+  - id: TC-OUT-RUNTOOL-MISSING
+    requirement: REQ-OUT-TOOL-ENV
+    behavior: RunTool は 宣言に合わない環境で 足りない物を名乗って終わり 処理を呼ばない。
+    input: 宣言 (git の木が要る・program X の版 n が要る) と それを満たさない環境 (fake)
+    expect: 処理は 1 度も呼ばれない。誤りの文に 足りない物の名前が在る。exit の番号は 判定不能の値。
+
+  - id: TC-OUT-RUNTOOL-OK
+    requirement: REQ-OUT-TOOL-ENV
+    behavior: RunTool は 宣言に合う環境で set を渡して処理を呼ぶ。
+    input: 宣言と それを満たす環境 (fake)
+    expect: 処理が 1 回呼ばれ 渡された set の port が 宣言の範囲に限られている。
+
+  - id: TC-OUT-SECRET-NOCOPY
+    requirement: REQ-OUT-SECRET
+    behavior: secret を読む口は 値を返すだけで 作業場に file を作らない。
+    input: secret の名前
+    fakes: fake の FS・fake の Workdir
+    expect: 値が返る。FS と Workdir に 書き込みが記録されない。
+
+  - id: TC-OUT-CONTRACT
+    requirement: REQ-OUT-CONTRACT
+    behavior: 口ごとの契約の test を real と fake の両方に掛け 両方が通る。
+    input: 口ごとの契約 (例 Clock = Now は戻らない / FS = 書いた中身が読める・根の外は誤り / Env = 無い名前は 無い)
+    note: real に掛ける時は test が自分で作った物 (自分で作った dir・自分で起こした子 process) だけを触る。
+    expect: 同じ契約の test が real でも fake でも通る。片方だけ落ちる項目は 名前を出して 誤り。
+
+  - id: TC-OUT-LINT-GO
+    requirement: REQ-OUT-LINT
+    behavior: lint の設定は 部品の外で time.Now を呼ぶ code を落とし 部品の中の同じ呼び出しを通す。
+    input: 部品の外の package で time.Now を呼ぶ source・部品の real で呼ぶ source
+    expect: 前者は lint が誤りを出す。後者は 通る。
+
+  - id: TC-OUT-PARITY
+    requirement: REQ-OUT-PARITY
+    behavior: Go・TypeScript・Dart の port と method の名前の組が 設計書の ports の節と一致する。
+    input: 設計書の ports の節・各言語の公開の名前の一覧
+    expect: 3 つの言語とも 設計書と同じ組。食い違いは 名前を出して 誤り。
