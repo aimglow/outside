@@ -10,8 +10,8 @@ application とツールが 外 (時計・環境変数・file・git・子 proces
 
 | dir | 中身 |
 |---|---|
-| `go/` | Go の module (`github.com/aimglow/outside/go`、偽物 = `outsidefake`) |
-| `ts/` | TypeScript の library (`@aimglow/outside`、偽物 = `@aimglow/outside/fake`) |
+| `go/` | Go の module (`github.com/aimglow/outside/go`、 mock = `outsidemock`) |
+| `ts/` | TypeScript の library (`@aimglow/outside`、 mock = `@aimglow/outside/mock`) |
 | `dart/` | Dart の package (`outside`) |
 | `lint/` | stack ごとの lint の設定 (外を直に呼ぶ code を落とす) |
 

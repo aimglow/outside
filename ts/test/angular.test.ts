@@ -9,11 +9,11 @@ import {
   OUTSIDE_STORAGE,
   provideOutside,
 } from '../src/angular/index';
-import { createFakeSet } from '../src/fake/index';
+import { createMockSet } from '../src/mock/index';
 
 describe('REQ-OUT-INJECT Angular の口', () => {
   it('provideOutside で渡した set の port が token で引ける', () => {
-    const set = createFakeSet({ startMs: 0 });
+    const set = createMockSet({ startMs: 0 });
     const injector = Injector.create({ providers: provideOutside(set) });
     expect(injector.get(OUTSIDE_CLOCK)).toBe(set.clock);
     expect(injector.get(OUTSIDE_HTTP)).toBe(set.http);

@@ -5,7 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./fake": "./src/fake/index.ts",
+    "./mock": "./src/mock/index.ts",
     "./angular": "./src/angular/index.ts"
   },
   "scripts": {

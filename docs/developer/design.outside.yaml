@@ -6,7 +6,7 @@ repo: github.com/aimglow/outside
 
 purpose: >
   application とツールが 外 (時計・環境変数・file・git・子 process・作業場・通信・保存) を触る場所を
-  この部品 1 つに限る。処理の中身は 値を受けて値を返す形になり、test は 口に偽物を渡すだけで
+  この部品 1 つに限る。処理の中身は 値を受けて値を返す形になり、test は 口に mock を渡すだけで
   結果が決まる。機体が変わっても・日付が変わっても 同じ入力なら同じ結果になる。
 
 scope:
@@ -22,7 +22,7 @@ terms:
   outside: 処理の入力として宣言されていない物。時計・環境変数・file system・git・子 process・機体の値・通信・browser の保存。
   port: outside を触るための口。1 種類の外につき 1 つ。
   real: port の本物の実装。この部品の中だけに在る。
-  fake: port の test 用の実装。渡した値だけで振る舞いが決まる。
+  mock: port の test 用の実装。渡した値だけで振る舞いが決まる。
   set: 1 つの処理に渡す port の組。
   tool-environment: ツールが動く前提として宣言する環境 (要るツールと版・git の木の中か・作業場)。
 
@@ -32,27 +32,27 @@ requirements:
     check: lint (REQ-OUT-LINT)。
   - id: REQ-OUT-INJECT
     text: 処理は 自分が使う port を 引数か構造体で受け取る。package の変数や global から取らない。
-  - id: REQ-OUT-FAKE
+  - id: REQ-OUT-MOCK
     text: >
-      fake は 渡した値だけで振る舞いが決まる。実の時計・機体・file system を読まない。
-      fake が呼ばれた内容 (何を・何回) は test から読める。
-  - id: REQ-OUT-ONE-FAKE
-    text: 口 1 つにつき fake は 1 つ。この repo が持つ。利用する project は 自分で偽物を作らない。
+      mock は 渡した値だけで振る舞いが決まる。実の時計・機体・file system を読まない。
+      mock が呼ばれた内容 (何を・何回) は test から読める。
+  - id: REQ-OUT-ONE-MOCK
+    text: 口 1 つにつき mock は 1 つ。この repo が持つ。利用する project は 自分で mock を作らない。
   - id: REQ-OUT-CONTRACT
     text: >
-      real と fake は 同じ契約の test を通す (同じ入力に 同じ振る舞い)。
+      real と mock は 同じ契約の test を通す (同じ入力に 同じ振る舞い)。
       片方だけが通る振る舞いを残さない。
   - id: REQ-OUT-REAL-TESTED-HERE
     text: >
       real を実物で確かめる test は この repo の中だけに置く。その test は 自分で作った物だけを触り
-      機体に元から在る物を読まない。利用する project の test は 実物を触らず fake を渡す。
-  - id: REQ-OUT-FAKE-TREE
+      機体に元から在る物を読まない。利用する project の test は 実物を触らず mock を渡す。
+  - id: REQ-OUT-MOCK-TREE
     text: >
-      fake の FS に渡す dir の木は test の側が 値として宣言する (相対 path → 中身 の表。
+      mock の FS に渡す dir の木は test の側が 値として宣言する (相対 path → 中身 の表。
       空の dir は 末尾 / の path で書く)。disk に木を作らない。絶対 path と 根の外へ出る path の宣言は 誤り。
       複数の test が使う木は test の code の中の 名前つきの値として置く。
       大きい中身は 言語の埋め込み (Go の embed 等) で package の source として持ち test の時に disk を探さない。
-      宣言の形は Go・TypeScript・Dart で同じ。fake の Git の 追跡下の一覧と差分も 同じく値で宣言する。
+      宣言の形は Go・TypeScript・Dart で同じ。 mock の Git の 追跡下の一覧と差分も 同じく値で宣言する。
   - id: REQ-OUT-TOOL-ENV
     text: >
       ツールは 入口で tool-environment の宣言を確かめる。宣言に合わない環境では
@@ -79,46 +79,46 @@ ports:
     - name: Clock
       does: 今の時刻を返す。待つ。
       methods: [Now, Sleep]
-      fake: 決めた時刻から始まり Advance で進む。Sleep は 実時間を待たず 時刻を進める。
+      mock: 決めた時刻から始まり Advance で進む。Sleep は 実時間を待たず 時刻を進める。
     - name: Env
       does: 環境変数を名前で読む。
       methods: [Lookup]
-      fake: 渡した表だけを返す。表に無い名前は 無い と返す。
+      mock: 渡した表だけを返す。表に無い名前は 無い と返す。
     - name: FS
       does: 宣言した根の下の file を読む・書く・一覧する。
       methods: [ReadFile, WriteFile, ReadDir, Stat, Remove]
       rule: 根の外の path は 誤り。
-      fake: memory の上の木。
+      mock: memory の上の木。
     - name: Git
       does: 宣言した木の git の問いに答える (head の sha・追跡下の一覧・merge-base・差分の file)。
       methods: [Head, ListFiles, MergeBase, DiffNames, IsAncestor]
-      fake: 渡した値を返す。偽の repo を作らない。
+      mock: 渡した値を返す。偽の repo を作らない。
     - name: Proc
       does: 宣言した名前の program を起こし 結果を返す。
       methods: [Run]
       rule: tool-environment に無い program は 誤り。
-      fake: 起こされた引数を記録し 決めた結果を返す。
+      mock: 起こされた引数を記録し 決めた結果を返す。
     - name: Workdir
       does: 宣言した置き場の下に 作業場を作り 終わりに消す。
       methods: [New, Path, Cleanup]
-      fake: memory の上の木か test が渡した dir。
+      mock: memory の上の木か test が渡した dir。
   frontend_and_mobile:
     - name: Clock
       does: 今の時刻を返す。timer を掛ける。
       methods: [now, setTimeout, clearTimeout]
-      fake: 決めた時刻から始まり advance で進む。
+      mock: 決めた時刻から始まり advance で進む。
     - name: Http
       does: 通信を送り 応答を返す。
       methods: [request]
-      fake: 決めた応答を返し 送られた内容を記録する。
+      mock: 決めた応答を返し 送られた内容を記録する。
     - name: Storage
       does: browser か端末の保存を読む・書く。
       methods: [get, set, remove]
-      fake: memory の上の表。test ごとに空から始まる。
+      mock: memory の上の表。test ごとに空から始まる。
     - name: Config
       does: build 時と実行時の設定の値を返す。
       methods: [get]
-      fake: 渡した表だけを返す。
+      mock: 渡した表だけを返す。
 
 tool_entry:
   name: RunTool
@@ -156,8 +156,8 @@ lint:
     undecided: Dart の lint で どこまで止められるかは 実物で確かめていない。確かめた結果で この節を直す。
 
 layout:
-  go: go/            # module = github.com/aimglow/outside/go、偽物 = go/outsidefake
-  typescript: ts/    # package = @aimglow/outside、偽物 = @aimglow/outside/fake
+  go: go/            # module = github.com/aimglow/outside/go、 mock = go/outsidemock
+  typescript: ts/    # package = @aimglow/outside、 mock = @aimglow/outside/mock
   dart: dart/        # package = outside
   lint: lint/        # stack ごとの設定
   docs: docs/developer/
@@ -181,7 +181,7 @@ adoption:
     - ccark
   per_package_done:
     - 外を直に呼ぶ code が無い (lint が通る)
-    - test が fake だけで回る
+    - test が mock だけで回る
     - 台帳に記帳でき cache の確かめで その package が回らない
 
 open:

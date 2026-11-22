@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { createRealSet } from '../src/index';
-import { createFakeSet } from '../src/fake/index';
+import { createMockSet } from '../src/mock/index';
 
 const DESIGN_PORTS: Record<string, string[]> = {
   clock: ['now', 'setTimeout', 'clearTimeout'],
@@ -29,8 +29,8 @@ describe('TC-OUT-PARITY port と method の名前', () => {
     }
   });
 
-  it('fake の set は 設計書の method を全部持つ', () => {
-    const set = createFakeSet({ startMs: 0 });
+  it('mock の set は 設計書の method を全部持つ', () => {
+    const set = createMockSet({ startMs: 0 });
     expect(Object.keys(set).sort()).toEqual(Object.keys(DESIGN_PORTS).sort());
     for (const [port, methods] of Object.entries(DESIGN_PORTS)) {
       expect(methodNames(set[port as keyof typeof set]), port).toEqual(expect.arrayContaining(methods));

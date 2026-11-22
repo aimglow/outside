@@ -26,7 +26,7 @@ outside は 全 project が module として取り込む共通部品である。
 - project の code は 外を直に呼ばず この部品の口 (port) を通す。
 - 版は tag で固定して使う。main を追わない。全 project が 同じ版を使う。
 - project の中に置いた この部品の写しは project の中で編集しない。直すのは この repo だけ。
-- project に写すのは 実装と偽物だけ。この部品の test は写さない:
+- project に写すのは 実装と mock だけ。この部品の test は写さない:
   TypeScript = `ts/src/` (Nx の共有 library として置き `test` の target を定義しない) /
   Dart = `dart/lib/` と `pubspec.yaml` / Go = module として取り込む (project の `go test` は 依存の module の test を回さない)。
 - 写しには 写した版を 1 行で記録する。
@@ -34,7 +34,7 @@ outside は 全 project が module として取り込む共通部品である。
 ## 部品の足し方
 
 - 口や method が足りなくなったら 必要になった project が この repo に足す (project の中の写しには足さない)。
-- 足す順 = 設計書 (ports の節) → テスト仕様 → 実装 (Go・TypeScript・Dart で 要る言語) → 本物と偽物の契約の test → 版を上げて tag。
+- 足す順 = 設計書 (ports の節) → テスト仕様 → 実装 (Go・TypeScript・Dart で 要る言語) → 本物と mock の契約の test → 版を上げて tag。
 - 足すだけの変更は MINOR (前の版を使う project を壊さない)。意味を変える・消す変更は MAJOR。
 
 ## 版が上がった時の伝え方
@@ -57,15 +57,19 @@ outside は 全 project が module として取り込む共通部品である。
   この repo の 本物の実装 (real) の中だけに置く。
 - real を 実物で確かめる test は この repo の中だけで行う。その test は 自分で作った物だけを触り
   機体に元から在る物 (機体の環境変数・/tmp に在る file・手元の repo) を読まない。
-- 利用する project の test は 実物を触らない。この部品の偽物 (fake) を渡す。
+- 利用する project の test は 実物を触らない。この部品の mock を渡す。
 - この部品自身の test は この repo の中で回す。利用する project の中では回さない
-  (project に写すのは 実装と偽物だけ。project の検査は project の code を確かめる)。
+  (project に写すのは 実装と mock だけ。project の検査は project の code を確かめる)。
 
-## 偽物 (fake) の決め
+## mock の決め
 
-- 口 1 つにつき 偽物は 1 つ。この repo が持つ。利用する project は 自分で偽物を作らない。
-- 偽物は test が渡した値だけで振る舞いが決まる。実の時計・機体・file system を読まない。
-- 本物と偽物は 同じ契約の test を通す (同じ入力に 同じ振る舞い)。偽物だけが通る・本物だけが通る
+mock = test にとって有用で妥当な 決めた値を返す 口の実装。test が渡した値だけで振る舞いが決まり
+本物と同じ契約を満たす。中身を問わない代用品のことではない。
+この repo と 利用する project の 文書・code・issue は mock と書く。
+
+- 口 1 つにつき mock は 1 つ。この repo が持つ。利用する project は 自分で mock を作らない。
+- mock は test が渡した値だけで振る舞いが決まる。実の時計・機体・file system を読まない。
+- 本物と mock は 同じ契約の test を通す (同じ入力に 同じ振る舞い)。 mock だけが通る・本物だけが通る
   振る舞いを 残さない。
 
 ## 作る順

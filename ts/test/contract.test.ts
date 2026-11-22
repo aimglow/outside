@@ -1,4 +1,4 @@
-// 契約を real と fake の両方に掛ける。
+// 契約を real と mock の両方に掛ける。
 // real には test が作った物だけを渡す (機体の保存・通信・環境変数を触らない)。
 
 import {
@@ -10,12 +10,12 @@ import {
   type WebStorageLike,
 } from '../src/index';
 import {
-  createFakeClock,
-  createFakeConfig,
-  createFakeHttp,
-  createFakeStorage,
-  type FakeHttpRoute,
-} from '../src/fake/index';
+  createMockClock,
+  createMockConfig,
+  createMockHttp,
+  createMockStorage,
+  type MockHttpRoute,
+} from '../src/mock/index';
 import {
   clockContract,
   configContract,
@@ -30,8 +30,8 @@ clockContract('real', () => {
   return { clock, pass: () => new Promise<void>((done) => clock.setTimeout(done, 0)) };
 });
 
-clockContract('fake', () => {
-  const clock = createFakeClock(1_700_000_000_000);
+clockContract('mock', () => {
+  const clock = createMockClock(1_700_000_000_000);
   return {
     clock,
     pass: async () => {
@@ -55,9 +55,9 @@ function fetchFromRoutes(routes: ContractRoute[]): FetchLike {
 
 httpContract('real', (routes) => createRealHttp(fetchFromRoutes(routes)));
 
-httpContract('fake', (routes) =>
-  createFakeHttp(
-    routes.map((r): FakeHttpRoute =>
+httpContract('mock', (routes) =>
+  createMockHttp(
+    routes.map((r): MockHttpRoute =>
       'error' in r
         ? r
         : {
@@ -84,9 +84,9 @@ function memoryWebStorage(): WebStorageLike {
 }
 
 storageContract('real', () => createRealStorage(memoryWebStorage()));
-storageContract('fake', () => createFakeStorage());
+storageContract('mock', () => createMockStorage());
 
 // real の Config: 環境変数の表を test が渡す (機体の環境変数を読まない)。
 configContract('real (env の表)', (table) => createRealConfig({ env: table }));
 configContract('real (values の表)', (table) => createRealConfig({ values: table, env: {} }));
-configContract('fake', (table) => createFakeConfig(table));
+configContract('mock', (table) => createMockConfig(table));

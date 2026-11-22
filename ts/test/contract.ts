@@ -1,4 +1,4 @@
-// 口ごとの契約。real と fake の両方に 同じ関数を掛ける。
+// 口ごとの契約。real と mock の両方に 同じ関数を掛ける。
 
 import { describe, expect, it } from 'vitest';
 import type { Clock, Config, Http, Storage } from '../src/index';

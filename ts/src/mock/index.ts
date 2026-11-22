@@ -1,4 +1,4 @@
-// outside の偽物 (fake)。口 1 つにつき 1 つ。
+// outside のmock (mock)。口 1 つにつき 1 つ。
 // test が渡した値だけで振る舞いが決まる。実の時計・環境変数・通信・保存を読まない。
 // 呼ばれた内容は calls から読める。
 
@@ -13,35 +13,35 @@ import type {
   TimerHandle,
 } from '../index';
 
-export type FakeClockCall =
+export type MockClockCall =
   | { method: 'now' }
   | { method: 'setTimeout'; ms: number }
   | { method: 'clearTimeout' };
 
-export interface FakeClock extends Clock {
+export interface MockClock extends Clock {
   /** 時刻を ms 進め その間に期限が来た timer を 期限の順 (同じ期限は 掛けた順) に呼ぶ。 */
   advance(ms: number): void;
   /** まだ呼ばれていない timer の数。 */
   pendingTimers(): number;
-  readonly calls: readonly FakeClockCall[];
+  readonly calls: readonly MockClockCall[];
 }
 
-interface FakeTimer {
+interface MockTimer {
   id: number;
   due: number;
   fn: () => void;
 }
 
 /** startMs (epoch からの ms) から始まり advance でだけ進む Clock。 */
-export function createFakeClock(startMs: number): FakeClock {
+export function createMockClock(startMs: number): MockClock {
   let current = startMs;
   let nextId = 1;
-  let timers: FakeTimer[] = [];
-  const calls: FakeClockCall[] = [];
+  let timers: MockTimer[] = [];
+  const calls: MockClockCall[] = [];
 
   // 期限が limit 以下の timer のうち 最も早い物を取り出す。
-  const takeNext = (limit: number): FakeTimer | undefined => {
-    let best: FakeTimer | undefined;
+  const takeNext = (limit: number): MockTimer | undefined => {
+    let best: MockTimer | undefined;
     for (const t of timers) {
       if (t.due > limit) continue;
       if (best === undefined || t.due < best.due || (t.due === best.due && t.id < best.id)) {
@@ -74,7 +74,7 @@ export function createFakeClock(startMs: number): FakeClock {
     },
     advance(ms) {
       if (!(ms >= 0)) {
-        throw new Error(`outside fake Clock: advance needs a non-negative number, got ${ms}`);
+        throw new Error(`outside mock Clock: advance needs a non-negative number, got ${ms}`);
       }
       const end = current + ms;
       // callback の中で掛けられた timer も 期限が end 以下なら この advance の中で呼ぶ。
@@ -89,17 +89,17 @@ export function createFakeClock(startMs: number): FakeClock {
 }
 
 /** method と url が一致した request に返す物。response か error の どちらか。 */
-export type FakeHttpRoute =
+export type MockHttpRoute =
   | { method: string; url: string; response: { status: number; headers?: Record<string, string>; body?: string } }
   | { method: string; url: string; error: string };
 
-export interface FakeHttp extends Http {
+export interface MockHttp extends Http {
   /** 送られた request (送られた順)。 */
   readonly calls: readonly HttpRequest[];
 }
 
 /** routes に決めた応答を返す Http。routes に無い request と error の route は reject する。 */
-export function createFakeHttp(routes: readonly FakeHttpRoute[] = []): FakeHttp {
+export function createMockHttp(routes: readonly MockHttpRoute[] = []): MockHttp {
   const calls: HttpRequest[] = [];
   return {
     calls,
@@ -108,7 +108,7 @@ export function createFakeHttp(routes: readonly FakeHttpRoute[] = []): FakeHttp 
       const route = routes.find((r) => r.method === req.method && r.url === req.url);
       if (route === undefined) {
         return Promise.reject(
-          new Error(`outside fake Http: no response configured for ${req.method} ${req.url}`),
+          new Error(`outside mock Http: no response configured for ${req.method} ${req.url}`),
         );
       }
       if ('error' in route) return Promise.reject(new Error(route.error));
@@ -126,19 +126,19 @@ export function createFakeHttp(routes: readonly FakeHttpRoute[] = []): FakeHttp 
   };
 }
 
-export type FakeStorageCall =
+export type MockStorageCall =
   | { method: 'get'; key: string }
   | { method: 'set'; key: string; value: string }
   | { method: 'remove'; key: string };
 
-export interface FakeStorage extends Storage {
-  readonly calls: readonly FakeStorageCall[];
+export interface MockStorage extends Storage {
+  readonly calls: readonly MockStorageCall[];
 }
 
 /** memory の上の表に保存する Storage。空から始まる。 */
-export function createFakeStorage(): FakeStorage {
+export function createMockStorage(): MockStorage {
   const table = new Map<string, string>();
-  const calls: FakeStorageCall[] = [];
+  const calls: MockStorageCall[] = [];
   return {
     calls,
     get(key) {
@@ -156,13 +156,13 @@ export function createFakeStorage(): FakeStorage {
   };
 }
 
-export interface FakeConfig extends Config {
+export interface MockConfig extends Config {
   /** 引かれた名前 (引かれた順)。 */
   readonly calls: readonly string[];
 }
 
 /** 渡した表だけを返す Config。表に無い名前は undefined。 */
-export function createFakeConfig(table: Readonly<Record<string, string>> = {}): FakeConfig {
+export function createMockConfig(table: Readonly<Record<string, string>> = {}): MockConfig {
   const values = new Map(Object.entries(table));
   const calls: string[] = [];
   return {
@@ -174,26 +174,26 @@ export function createFakeConfig(table: Readonly<Record<string, string>> = {}): 
   };
 }
 
-export interface FakeSet extends OutsideSet {
-  clock: FakeClock;
-  http: FakeHttp;
-  storage: FakeStorage;
-  config: FakeConfig;
+export interface MockSet extends OutsideSet {
+  clock: MockClock;
+  http: MockHttp;
+  storage: MockStorage;
+  config: MockConfig;
 }
 
-export interface FakeSetOptions {
+export interface MockSetOptions {
   /** Clock の開始の時刻 (epoch からの ms)。 */
   startMs: number;
-  routes?: readonly FakeHttpRoute[];
+  routes?: readonly MockHttpRoute[];
   config?: Readonly<Record<string, string>>;
 }
 
-/** fake の port の組を作る。 */
-export function createFakeSet(options: FakeSetOptions): FakeSet {
+/** mock の port の組を作る。 */
+export function createMockSet(options: MockSetOptions): MockSet {
   return {
-    clock: createFakeClock(options.startMs),
-    http: createFakeHttp(options.routes),
-    storage: createFakeStorage(),
-    config: createFakeConfig(options.config),
+    clock: createMockClock(options.startMs),
+    http: createMockHttp(options.routes),
+    storage: createMockStorage(),
+    config: createMockConfig(options.config),
   };
 }

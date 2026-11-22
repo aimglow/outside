@@ -8,7 +8,7 @@ export const OUTSIDE_HTTP = new InjectionToken<Http>('OUTSIDE_HTTP');
 export const OUTSIDE_STORAGE = new InjectionToken<Storage>('OUTSIDE_STORAGE');
 export const OUTSIDE_CONFIG = new InjectionToken<Config>('OUTSIDE_CONFIG');
 
-/** 渡した set (real でも fake でも) の port を token に結ぶ。 */
+/** 渡した set (real でも mock でも) の port を token に結ぶ。 */
 export function provideOutside(set: OutsideSet): Provider[] {
   return [
     { provide: OUTSIDE_CLOCK, useValue: set.clock },
