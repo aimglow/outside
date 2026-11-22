@@ -15,6 +15,9 @@ outside は 全 project が module として取り込む共通部品である。
 - push の前に 手元で 全部の test と lint を回す。通らない物を push しない。
 - 版は git の tag で切る (`vMAJOR.MINOR.PATCH`、Go の module は `go/vMAJOR.MINOR.PATCH`)。
   壊れた版を tag にしない。tag は動かさない (直しは 次の版)。
+- main は 常に 最新の版にしておく: main の先頭は 最新の版の tag と同じ commit。
+  code (go/・ts/・dart/・lint/) を変える変更は 版を上げて tag を切るまでを 1 つの作業として済ませ、
+  tag の無い code の変更を main に残さない。文書だけの変更は 版を上げない。
 - commit の message は 何を・なぜ を 1 行目に書く。
 
 ## 使われ方
@@ -23,6 +26,10 @@ outside は 全 project が module として取り込む共通部品である。
 - project の code は 外を直に呼ばず この部品の口 (port) を通す。
 - 版は tag で固定して使う。main を追わない。全 project が 同じ版を使う。
 - project の中に置いた この部品の写しは project の中で編集しない。直すのは この repo だけ。
+- project に写すのは 実装と偽物だけ。この部品の test は写さない:
+  TypeScript = `ts/src/` (Nx の共有 library として置き `test` の target を定義しない) /
+  Dart = `dart/lib/` と `pubspec.yaml` / Go = module として取り込む (project の `go test` は 依存の module の test を回さない)。
+- 写しには 写した版を 1 行で記録する。
 
 ## 部品の足し方
 
