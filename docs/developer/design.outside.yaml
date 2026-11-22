@@ -46,6 +46,13 @@ requirements:
     text: >
       real を実物で確かめる test は この repo の中だけに置く。その test は 自分で作った物だけを触り
       機体に元から在る物を読まない。利用する project の test は 実物を触らず fake を渡す。
+  - id: REQ-OUT-FAKE-TREE
+    text: >
+      fake の FS に渡す dir の木は test の側が 値として宣言する (相対 path → 中身 の表。
+      空の dir は 末尾 / の path で書く)。disk に木を作らない。絶対 path と 根の外へ出る path の宣言は 誤り。
+      複数の test が使う木は test の code の中の 名前つきの値として置く。
+      大きい中身は 言語の埋め込み (Go の embed 等) で package の source として持ち test の時に disk を探さない。
+      宣言の形は Go・TypeScript・Dart で同じ。fake の Git の 追跡下の一覧と差分も 同じく値で宣言する。
   - id: REQ-OUT-TOOL-ENV
     text: >
       ツールは 入口で tool-environment の宣言を確かめる。宣言に合わない環境では
