@@ -21,7 +21,14 @@ outside は 全 project が module として取り込む共通部品である。
 
 - 利用する project は この repo を module として取り込む (Go = module の版 / TypeScript・Dart = git の tag)。
 - project の code は 外を直に呼ばず この部品の口 (port) を通す。
-- 全 project が 同じ版を使う。
+- 版は tag で固定して使う。main を追わない。全 project が 同じ版を使う。
+- project の中に置いた この部品の写しは project の中で編集しない。直すのは この repo だけ。
+
+## 部品の足し方
+
+- 口や method が足りなくなったら 必要になった project が この repo に足す (project の中の写しには足さない)。
+- 足す順 = 設計書 (ports の節) → テスト仕様 → 実装 (Go・TypeScript・Dart で 要る言語) → 本物と偽物の契約の test → 版を上げて tag。
+- 足すだけの変更は MINOR (前の版を使う project を壊さない)。意味を変える・消す変更は MAJOR。
 
 ## 外への access と test の置き場
 
@@ -30,6 +37,8 @@ outside は 全 project が module として取り込む共通部品である。
 - real を 実物で確かめる test は この repo の中だけで行う。その test は 自分で作った物だけを触り
   機体に元から在る物 (機体の環境変数・/tmp に在る file・手元の repo) を読まない。
 - 利用する project の test は 実物を触らない。この部品の偽物 (fake) を渡す。
+- この部品自身の test は この repo の中で回す。利用する project の中では回さない
+  (project に写すのは 実装と偽物だけ。project の検査は project の code を確かめる)。
 
 ## 偽物 (fake) の決め
 
