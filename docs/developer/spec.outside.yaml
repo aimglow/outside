@@ -51,8 +51,8 @@ cases:
   - id: TC-OUT-RUNTOOL-MISSING
     requirement: REQ-OUT-TOOL-ENV
     behavior: RunTool は 宣言に合わない環境で 足りない物を名乗って終わり 処理を呼ばない。
-    input: 宣言 (git の木が要る・program X の版 n が要る) と それを満たさない環境 (mock)
-    expect: 処理は 1 度も呼ばれない。誤りの文に 足りない物の名前が在る。exit の番号は 判定不能の値。
+    input: 宣言 (git の木が要る・program X の版 n が要る・置き場 $NAME/<相対> が外へ出る) と それを満たさない環境 (mock)
+    expect: 処理は 1 度も呼ばれない。誤りの文に 足りない物の名前が在る。exit の番号は 3 (判定不能)。
 
   - id: TC-OUT-RUNTOOL-OK
     requirement: REQ-OUT-TOOL-ENV
@@ -70,7 +70,9 @@ cases:
   - id: TC-OUT-CONTRACT
     requirement: REQ-OUT-CONTRACT
     behavior: 口ごとの契約の test を real と mock の両方に掛け 両方が通る。
-    input: 口ごとの契約 (例 Clock = Now は戻らない / FS = 書いた中身が読める・根の外は誤り / Env = 無い名前は 無い)
+    input: 口ごとの契約 (例 Clock = Now は戻らない / FS = 書いた中身が読める・根の外は誤り / Env = 無い名前は 無い /
+      Git = Resolve が ref を sha に引く・ListAt が rev の木の直下を返し 無い dir は空・ReadAt が rev の中身を返し 無い path は fs.ErrNotExist /
+      Workdir = 作った作業場の FS に書けて読め 根の外は誤り・作っていない作業場の FS は誤り)
     note: real に掛ける時は test が自分で作った物 (自分で作った dir・自分で起こした子 process) だけを触る。
     expect: 同じ契約の test が real でも mock でも通る。片方だけ落ちる項目は 名前を出して 誤り。
 

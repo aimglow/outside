@@ -1,20 +1,31 @@
 package outsidemock
 
-import "fmt"
+import (
+	"fmt"
+	"io/fs"
+	"sort"
+	"strings"
+
+	"github.com/aimglow/outside/go/internal/rule"
+)
 
 // Pair は 2 つの commit の組 (問いの引数の順)。
 type Pair struct{ A, B string }
 
-// GitValues は 偽の Git が返す値。test が値として宣言する。
+// GitValues は mock の Git が返す値。test が値として宣言する。
 type GitValues struct {
 	Head       string
 	Files      []string
 	MergeBase  map[Pair]string
 	DiffNames  map[Pair][]string
 	IsAncestor map[Pair]bool
+	// Refs は ref → sha。Resolve が引く。
+	Refs map[string]string
+	// Trees は rev → その木の file (相対 path → 中身)。ListAt と ReadAt が引く。
+	Trees map[string]map[string]string
 }
 
-// Git は 渡した値を返すmock。repo を作らない。宣言に無い問いは 誤り。
+// Git は 渡した値を返す mock。repo を作らない。宣言に無い問いは 誤り。
 type Git struct {
 	recorder
 	v GitValues
@@ -61,4 +72,69 @@ func (g *Git) IsAncestor(ancestor, descendant string) (bool, error) {
 		return false, fmt.Errorf("outsidemock: 祖先の問い %s %s が宣言されていない", ancestor, descendant)
 	}
 	return is, nil
+}
+
+func (g *Git) Resolve(ref string) (string, error) {
+	g.record("Resolve", ref)
+	sha, ok := g.v.Refs[ref]
+	if !ok {
+		return "", fmt.Errorf("outsidemock: ref %s が宣言されていない", ref)
+	}
+	return sha, nil
+}
+
+func (g *Git) tree(rev string) (map[string]string, error) {
+	t, ok := g.v.Trees[rev]
+	if !ok {
+		return nil, fmt.Errorf("outsidemock: rev %s の木が宣言されていない", rev)
+	}
+	return t, nil
+}
+
+func (g *Git) ListAt(rev, dir string) ([]string, error) {
+	g.record("ListAt", rev, dir)
+	c, err := rule.CleanRel(dir)
+	if err != nil {
+		return nil, err
+	}
+	t, err := g.tree(rev)
+	if err != nil {
+		return nil, err
+	}
+	prefix := c + "/"
+	if c == "." {
+		prefix = ""
+	}
+	seen := map[string]bool{}
+	names := []string{}
+	for p := range t {
+		rest, ok := strings.CutPrefix(p, prefix)
+		if !ok || rest == "" {
+			continue
+		}
+		name, _, _ := strings.Cut(rest, "/")
+		if !seen[name] {
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+func (g *Git) ReadAt(rev, p string) ([]byte, error) {
+	g.record("ReadAt", rev, p)
+	c, err := rule.CleanRel(p)
+	if err != nil {
+		return nil, err
+	}
+	t, err := g.tree(rev)
+	if err != nil {
+		return nil, err
+	}
+	body, ok := t[c]
+	if !ok {
+		return nil, fmt.Errorf("outsidemock: %s:%s: %w", rev, c, fs.ErrNotExist)
+	}
+	return []byte(body), nil
 }

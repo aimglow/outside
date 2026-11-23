@@ -1,6 +1,6 @@
 package outsidemock
 
-// Env は 偽の環境変数。渡した表だけを返す。
+// Env は mock の環境変数。渡した表だけを返す。
 type Env struct {
 	recorder
 	vars map[string]string

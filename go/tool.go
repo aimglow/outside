@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
@@ -17,7 +18,7 @@ import (
 const (
 	ExitOK           = 0
 	ExitFail         = 1
-	ExitUndetermined = 2
+	ExitUndetermined = 3
 )
 
 // ExitCode は RunTool の戻りを exit の番号へ直す。
@@ -38,7 +39,7 @@ type Decl struct {
 	RequiresGitWorktree bool `toml:"requires_git_worktree"`
 	// Programs は 起こしてよい program の 名前 → 版。版が空なら 起こせる事だけを確かめる。
 	Programs map[string]string `toml:"programs"`
-	// WorkdirRoot は 作業場の置き場。根からの相対 path か $NAME (環境変数の名前)。空なら 作業場を使わない。
+	// WorkdirRoot は 作業場の置き場。根からの相対 path か $NAME (環境変数の値) か $NAME/<相対 path>。空なら 作業場を使わない。
 	WorkdirRoot string `toml:"workdir_root"`
 	// Env は 読んでよい環境変数の名前。
 	Env []string `toml:"env"`
@@ -167,12 +168,20 @@ func RunToolWith(decl Decl, base Base, fn func(Set) error) (err error) {
 
 // resolveWorkdir は workdir_root を置き場へ直し 作業場の口を作る。誤りの文は 足りない物を名乗る。
 func resolveWorkdir(root string, base Base) (Workdir, error) {
-	if name, ok := strings.CutPrefix(root, "$"); ok {
+	if ref, ok := strings.CutPrefix(root, "$"); ok {
+		name, sub, _ := strings.Cut(ref, "/")
 		v, found := base.Env.Lookup(name)
 		if !found || v == "" {
 			return nil, fmt.Errorf("環境変数 %s (workdir_root)", name)
 		}
 		root = v
+		if sub != "" {
+			c, err := rule.CleanRel(sub)
+			if err != nil {
+				return nil, fmt.Errorf("workdir_root %s (環境変数の下の外)", ref)
+			}
+			root = path.Join(v, c)
+		}
 	} else {
 		c, err := rule.CleanRel(root)
 		if err != nil {
@@ -288,3 +297,6 @@ func (noWorkdir) New(string) (string, error) {
 }
 func (noWorkdir) Path() string   { return "" }
 func (noWorkdir) Cleanup() error { return nil }
+func (noWorkdir) FS(string) (FS, error) {
+	return nil, fmt.Errorf("%w: workdir_root が宣言されていない", ErrNoWorkdirRoot)
+}

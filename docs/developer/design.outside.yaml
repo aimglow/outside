@@ -91,18 +91,20 @@ ports:
       rule: 根の外の path は 誤り。
       mock: memory の上の木。
     - name: Git
-      does: 宣言した木の git の問いに答える (head の sha・追跡下の一覧・merge-base・差分の file)。
-      methods: [Head, ListFiles, MergeBase, DiffNames, IsAncestor]
-      mock: 渡した値を返す。偽の repo を作らない。
+      does: 宣言した木の git の問いに答える (head の sha・追跡下の一覧・merge-base・差分の file・ref の sha・ある rev の木の一覧と中身)。
+      methods: [Head, ListFiles, MergeBase, DiffNames, IsAncestor, Resolve, ListAt, ReadAt]
+      rule: ListAt は 無い dir に 空を返す。ReadAt は 無い path に fs.ErrNotExist を返す。根の外の path は 誤り。
+      mock: 渡した値を返す。実の repo を作らない。
     - name: Proc
       does: 宣言した名前の program を起こし 結果を返す。
       methods: [Run]
       rule: tool-environment に無い program は 誤り。
       mock: 起こされた引数を記録し 決めた結果を返す。
     - name: Workdir
-      does: 宣言した置き場の下に 作業場を作り 終わりに消す。
-      methods: [New, Path, Cleanup]
-      mock: memory の上の木か test が渡した dir。
+      does: 宣言した置き場の下に 作業場を作り 終わりに消す。作った作業場を根にした FS を返す。
+      methods: [New, Path, Cleanup, FS]
+      rule: FS は この口が作った作業場にだけ返す。
+      mock: memory の上の木。FS も memory の上。
   frontend_and_mobile:
     - name: Clock
       does: 今の時刻を返す。timer を掛ける。
@@ -126,7 +128,8 @@ tool_entry:
   does:
     - tool-environment の宣言を読む
     - 宣言を確かめる (要る program と版・git の木の中か・作業場の置き場)
-    - 合わなければ 足りない物を名乗って 誤りで終わる (exit の番号は 判定不能を 合否と分ける)
+    - 合わなければ 足りない物を名乗って 誤りで終わる
+  exit: 0 = 合格 / 1 = 不合格 / 3 = 判定不能 (宣言に合わない環境・宣言が読めない)
     - 合えば set (real) を作って 処理へ渡す
   declaration:
     format: TOML
@@ -134,7 +137,7 @@ tool_entry:
     fields:
       requires_git_worktree: bool
       programs: 名前と版の表
-      workdir_root: 作業場の置き場 (repo の中の相対 path か 環境変数の名前)
+      workdir_root: 作業場の置き場 (repo の中の相対 path か $NAME か $NAME/<相対 path>。相対 path は 外へ出ない)
       env: 読んでよい環境変数の名前の一覧
       fs_roots: 読み書きしてよい根の一覧 (repo の中の相対 path)
 
@@ -169,7 +172,12 @@ layout:
 
 versioning:
   scheme: 版は git の tag (vMAJOR.MINOR.PATCH)。Go の module は go/vMAJOR.MINOR.PATCH。
-  rule:
+  meaning:
+    0.x: どの project の main にも まだ入っていない間。口の形を 実物の付け替えで確かめている段。
+         この間は 意味を変える・消す変更も MINOR で出す (使う main が無いので 壊す相手が居ない)。
+    1.0.0: kifune で adoption の 5 つの確かめが通り 最初の project の main に入る時に切る。
+           以後 全 project の main が この版の上に居る = 下の rule で 壊す変更を名指す。
+  rule (1.0.0 から):
     - port の method を消す・意味を変える = MAJOR
     - port か method を足す = MINOR
     - 振る舞いを変えない直し = PATCH

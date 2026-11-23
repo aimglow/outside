@@ -284,6 +284,33 @@ func gitContract(t *testing.T, g outside.Git, c1, c2 string) {
 	if _, err := g.MergeBase(c1, "no-such-commit"); err == nil {
 		t.Error("知らない commit の MergeBase が通った")
 	}
+	if got, err := g.Resolve("HEAD"); err != nil || got != c2 {
+		t.Errorf("Resolve(HEAD) = %q, %v (want %q)", got, err, c2)
+	}
+	if _, err := g.Resolve("no-such-ref"); err == nil {
+		t.Error("知らない ref の Resolve が通った")
+	}
+	if got, err := g.ListAt(c1, "."); err != nil || !reflect.DeepEqual(got, []string{"a.txt", "dir"}) {
+		t.Errorf("ListAt(c1, .) = %v, %v", got, err)
+	}
+	if got, err := g.ListAt(c2, "dir"); err != nil || !reflect.DeepEqual(got, []string{"b.txt"}) {
+		t.Errorf("ListAt(c2, dir) = %v, %v", got, err)
+	}
+	if got, err := g.ListAt(c2, "no-dir"); err != nil || len(got) != 0 {
+		t.Errorf("ListAt(c2, no-dir) = %v, %v (want 空)", got, err)
+	}
+	if got, err := g.ReadAt(c1, "a.txt"); err != nil || string(got) != "1" {
+		t.Errorf("ReadAt(c1, a.txt) = %q, %v", got, err)
+	}
+	if got, err := g.ReadAt(c2, "a.txt"); err != nil || string(got) != "2" {
+		t.Errorf("ReadAt(c2, a.txt) = %q, %v", got, err)
+	}
+	if _, err := g.ReadAt(c1, "c.txt"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("ReadAt(c1, c.txt) = %v (want fs.ErrNotExist)", err)
+	}
+	if _, err := g.ReadAt(c1, "../x"); err == nil {
+		t.Error("根の外の ReadAt が通った")
+	}
 }
 
 // gitEnv は test の git に渡す環境の全部。機体の設定 (global・system) を読ませない。
@@ -346,6 +373,11 @@ func TestContract_TC_OUT_CONTRACT_Git(t *testing.T) {
 			MergeBase:  map[outsidemock.Pair]string{{A: c1, B: c2}: c1},
 			DiffNames:  map[outsidemock.Pair][]string{{A: c1, B: c2}: {"a.txt", "c.txt"}},
 			IsAncestor: map[outsidemock.Pair]bool{{A: c1, B: c2}: true, {A: c2, B: c1}: false},
+			Refs:       map[string]string{"HEAD": c2},
+			Trees: map[string]map[string]string{
+				c1: {"a.txt": "1", "dir/b.txt": "1"},
+				c2: {"a.txt": "2", "c.txt": "1", "dir/b.txt": "1"},
+			},
 		})
 		gitContract(t, g, c1, c2)
 	})
@@ -434,6 +466,22 @@ func workdirContract(t *testing.T, w outside.Workdir, root string, exists func(s
 	}
 	if w.Path() != p2 {
 		t.Errorf("Path = %q (want %q)", w.Path(), p2)
+	}
+	f, err := w.FS(p2)
+	if err != nil {
+		t.Fatalf("作った作業場の FS = %v", err)
+	}
+	if err := f.WriteFile("m/001.sql", []byte("x")); err != nil {
+		t.Errorf("作業場の FS に書けない: %v", err)
+	}
+	if got, err := f.ReadFile("m/001.sql"); err != nil || string(got) != "x" {
+		t.Errorf("作業場の FS から読めない: %q, %v", got, err)
+	}
+	if _, err := f.ReadFile("../job1/x"); err == nil {
+		t.Error("作業場の FS で 根の外が読めた")
+	}
+	if _, err := w.FS(filepath.Join(root, "not-made")); err == nil {
+		t.Error("作っていない作業場の FS が通った")
 	}
 	if err := w.Cleanup(); err != nil {
 		t.Fatal(err)

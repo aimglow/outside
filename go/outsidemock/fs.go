@@ -13,7 +13,7 @@ import (
 	"github.com/aimglow/outside/go/internal/rule"
 )
 
-// Tree は 偽の FS に渡す dir の木。根からの相対 path → 中身。
+// Tree は mock の FS に渡す dir の木。根からの相対 path → 中身。
 // 末尾 / の path は 空の dir。絶対 path と 根の外へ出る path は NewFS が誤りにする。
 type Tree map[string]string
 

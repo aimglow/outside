@@ -71,6 +71,12 @@ type Git interface {
 	DiffNames(from, to string) ([]string, error)
 	// IsAncestor は ancestor が descendant の祖先かを返す。
 	IsAncestor(ancestor, descendant string) (bool, error)
+	// Resolve は ref (branch・tag・sha・HEAD) を commit の sha に引く。
+	Resolve(ref string) (string, error)
+	// ListAt は rev の木の dir の直下の file の名を 名前の順で返す。dir が無ければ 空。
+	ListAt(rev, dir string) ([]string, error)
+	// ReadAt は rev の木の path の file の中身を返す。無い path は fs.ErrNotExist。
+	ReadAt(rev, path string) ([]byte, error)
 }
 
 // Cmd は 起こす program と その引数。
@@ -103,6 +109,8 @@ type Workdir interface {
 	Path() string
 	// Cleanup は この口が作った作業場を 全て消す。
 	Cleanup() error
+	// FS は この口が作った作業場 path を根にした FS を返す。この口が作っていない path は 誤り。
+	FS(path string) (FS, error)
 }
 
 // Set は 1 つの処理に渡す port の組。

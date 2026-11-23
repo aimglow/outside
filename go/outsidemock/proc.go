@@ -7,7 +7,7 @@ import (
 	"github.com/aimglow/outside/go"
 )
 
-// Proc は 偽の子 process。起こされた内容を記録し 決めた結果を返す。program を起こさない。
+// Proc は mock の子 process。起こされた内容を記録し 決めた結果を返す。program を起こさない。
 type Proc struct {
 	recorder
 	programs map[string]func(outside.Cmd) outside.Result

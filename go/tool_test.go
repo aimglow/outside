@@ -14,7 +14,7 @@ import (
 	"github.com/aimglow/outside/go/outsidemock"
 )
 
-// mockWorld は RunToolWith に渡す 偽の環境。置き場は work だけが在る。
+// mockWorld は RunToolWith に渡す mock の環境。置き場は work だけが在る。
 type mockWorld struct {
 	env      *outsidemock.Env
 	fs       *outsidemock.FS
@@ -23,7 +23,7 @@ type mockWorld struct {
 	workdirs []*outsidemock.Workdir
 }
 
-// worldTree は 偽の環境の木。data と other と 空の work を持つ。
+// worldTree は mock の環境の木。data と other と 空の work を持つ。
 var worldTree = outsidemock.Tree{
 	"data/in.txt":  "in",
 	"other/no.txt": "no",
@@ -37,7 +37,7 @@ func newWorld(t *testing.T, head string) *mockWorld {
 		t.Fatal(err)
 	}
 	return &mockWorld{
-		env: outsidemock.NewEnv(map[string]string{"ALLOWED": "yes", "OTHER": "hidden", "WORK_ROOT": "work"}),
+		env: outsidemock.NewEnv(map[string]string{"ALLOWED": "yes", "OTHER": "hidden", "WORK_ROOT": "work", "DATA_ROOT": "."}),
 		fs:  fsys,
 		git: outsidemock.NewGit(outsidemock.GitValues{Head: head}),
 		proc: outsidemock.NewProc(map[string]func(outside.Cmd) outside.Result{
@@ -103,6 +103,12 @@ func TestRunTool_TC_OUT_RUNTOOL_MISSING(t *testing.T) {
 			want: []string{"NO_SUCH_ROOT"},
 		},
 		{
+			name: "環境変数の下の外へ出る置き場",
+			decl: outside.Decl{WorkdirRoot: "$WORK_ROOT/../x"},
+			head: "abc",
+			want: []string{"WORK_ROOT/../x"},
+		},
+		{
 			name: "fs_roots の dir が無い",
 			decl: outside.Decl{FSRoots: []string{"nodata"}},
 			head: "abc",
@@ -144,7 +150,7 @@ func TestRunTool_TC_OUT_RUNTOOL_MISSING(t *testing.T) {
 
 // TC-OUT-RUNTOOL-OK: 宣言に合う環境で 宣言の範囲に絞った set を渡して 処理を 1 回 呼ぶ。
 func TestRunTool_TC_OUT_RUNTOOL_OK(t *testing.T) {
-	for _, workdirRoot := range []string{"work", "$WORK_ROOT"} {
+	for _, workdirRoot := range []string{"work", "$WORK_ROOT", "$DATA_ROOT/work"} {
 		t.Run(workdirRoot, func(t *testing.T) {
 			w := newWorld(t, "abc")
 			decl := outside.Decl{
@@ -210,7 +216,7 @@ func TestRunTool_TC_OUT_RUNTOOL_OK(t *testing.T) {
 			if len(w.workdirs) != 1 || len(w.workdirs[0].Live()) != 0 {
 				t.Errorf("作業場が残った: %+v", w.workdirs)
 			}
-			// 宣言に無い program は 偽の環境まで届いていない。
+			// 宣言に無い program は mock の環境まで届いていない。
 			for _, c := range w.proc.Calls() {
 				if c.Args[0] == "other" {
 					t.Errorf("宣言に無い program が環境へ届いた: %+v", c)

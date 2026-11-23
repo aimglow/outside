@@ -220,6 +220,51 @@ func (g realGit) IsAncestor(ancestor, descendant string) (bool, error) {
 	}
 }
 
+func (g realGit) Resolve(ref string) (string, error) {
+	out, _, err := g.run("rev-parse", "--verify", "--end-of-options", ref+"^{commit}")
+	return strings.TrimSpace(out), err
+}
+
+func (g realGit) ListAt(rev, dir string) ([]string, error) {
+	c, err := rule.CleanRel(dir)
+	if err != nil {
+		return nil, err
+	}
+	spec := rev + ":" + c
+	if c == "." {
+		spec = rev + ":"
+	}
+	out, code, err := g.run("ls-tree", "-z", "--name-only", spec)
+	if code == 128 {
+		if _, e := g.Resolve(rev); e != nil {
+			return nil, e
+		}
+		return []string{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return splitZ(out), nil
+}
+
+func (g realGit) ReadAt(rev, p string) ([]byte, error) {
+	c, err := rule.CleanRel(p)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := g.Resolve(rev); err != nil {
+		return nil, err
+	}
+	if _, code, _ := g.run("cat-file", "-e", rev+":"+c); code != 0 {
+		return nil, fmt.Errorf("outside: %s:%s: %w", rev, c, fs.ErrNotExist)
+	}
+	out, _, err := g.run("cat-file", "blob", rev+":"+c)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(out), nil
+}
+
 type realProc struct{ programs map[string]string }
 
 // NewProc は programs (名前 → 実行 file の path) に在る program だけを起こす口を返す。
@@ -299,6 +344,15 @@ func (w *realWorkdir) Path() string {
 	return w.made[len(w.made)-1]
 }
 
+func (w *realWorkdir) FS(p string) (FS, error) {
+	for _, m := range w.made {
+		if m == p {
+			return NewFS(p)
+		}
+	}
+	return nil, fmt.Errorf("outside: この口が作っていない作業場: %s", p)
+}
+
 func (w *realWorkdir) Cleanup() error {
 	var errs []error
 	for _, p := range w.made {
@@ -310,7 +364,7 @@ func (w *realWorkdir) Cleanup() error {
 
 // RunTool は ツールの入口。declPath の宣言 (outside.toml) を読み 環境を確かめ、
 // 合えば real の Set で fn を呼ぶ。合わなければ fn を呼ばず 足りない物を名乗る誤りを返す。
-// 宣言の相対 path の基準は requires_git_worktree が真なら git の木の根、偽なら 宣言の file の dir。
+// 宣言の相対 path の基準は requires_git_worktree がtrue なら git の木の根、false なら 宣言の file の dir。
 func RunTool(declPath string, fn func(Set) error) error {
 	data, err := os.ReadFile(declPath)
 	if err != nil {

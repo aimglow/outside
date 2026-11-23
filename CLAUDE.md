@@ -39,7 +39,8 @@ project の検査が 変わった物に依る分だけ回る (4) image の build
 
 - 口や method が足りなくなったら 必要になった project が この repo に足す (project の中の写しには足さない)。
 - 足す順 = 設計書 (ports の節) → テスト仕様 → 実装 (Go・TypeScript・Dart で 要る言語) → 本物と mock の契約の test → 版を上げて tag。
-- 足すだけの変更は MINOR (前の版を使う project を壊さない)。意味を変える・消す変更は MAJOR。
+- 版の番号の意味は 設計書の versioning.meaning が決める。0.x (どの project の main にも まだ入っていない間) は 意味を変える変更も MINOR。
+  1.0.0 (最初の project の main に入る時) から: 足すだけの変更は MINOR (前の版を使う project を壊さない)。意味を変える・消す変更は MAJOR。
 
 ## 版が上がった時の伝え方
 

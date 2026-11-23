@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Clock は 偽の時計。決めた時刻から始まり Advance と Sleep で進む。
+// Clock は mock の時計。決めた時刻から始まり Advance と Sleep で進む。
 type Clock struct {
 	recorder
 	mu  sync.Mutex

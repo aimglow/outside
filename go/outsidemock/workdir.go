@@ -15,10 +15,11 @@ type Workdir struct {
 	mu   sync.Mutex
 	root string
 	made []string
+	fss  map[string]*FS
 }
 
 // NewWorkdir は root を置き場とする Workdir を返す。
-// root が空か exists が偽 (置き場が在らない) なら ErrNoWorkdirRoot。
+// root が空か exists が false (置き場が在らない) なら ErrNoWorkdirRoot。
 func NewWorkdir(root string, exists bool) (*Workdir, error) {
 	if root == "" {
 		return nil, fmt.Errorf("%w: 置き場が宣言されていない", outside.ErrNoWorkdirRoot)
@@ -61,7 +62,33 @@ func (w *Workdir) Cleanup() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.made = nil
+	w.fss = nil
 	return nil
+}
+
+// FS は この口が作った作業場を根にした memory の上の FS を返す。同じ path には 同じ FS を返す。
+func (w *Workdir) FS(p string) (outside.FS, error) {
+	w.record("FS", p)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, m := range w.made {
+		if m != p {
+			continue
+		}
+		if f, ok := w.fss[p]; ok {
+			return f, nil
+		}
+		f, err := NewFS(Tree{})
+		if err != nil {
+			return nil, err
+		}
+		if w.fss == nil {
+			w.fss = map[string]*FS{}
+		}
+		w.fss[p] = f
+		return f, nil
+	}
+	return nil, fmt.Errorf("outsidemock: この口が作っていない作業場: %s", p)
 }
 
 // Live は 今 在る作業場の path を 作った順に返す。
