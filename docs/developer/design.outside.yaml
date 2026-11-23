@@ -176,7 +176,7 @@ versioning:
   meaning:
     0.x: どの project の main にも まだ入っていない間。口の形を 実物の付け替えで確かめている段。
          この間は 意味を変える・消す変更も MINOR で出す (使う main が無いので 壊す相手が居ない)。
-    1.0.0: kifune で adoption の 5 つの確かめが通り 最初の project の main に入る時に切る。
+    1.0.0: 最初の project の main に入る時に切る。
            以後 全 project の main が この版の上に居る = 下の rule で 壊す変更を名指す。
   rule (1.0.0 から):
     - port の method を消す・意味を変える = MAJOR
@@ -193,16 +193,7 @@ delivery:
   flow: main へ直に commit して push する。この repo は CI・便・gate を持たない (持ち主の決め 2026-11-23)。
   consequence: 確かめは commit の前に 手元で回す。壊れた版を tag にしない。
 
-adoption:
-  scope: project の全部の stack を 同時に扱う (BE・ツール = Go / FE = TypeScript (Nx・Next.js・Angular) / mobile = Dart (Flutter) / proto / infra (DB の migration・deploy の宣言・container))。stack の順に分けない。
-  order:
-    - kifune (全部の stack。cache_test.txt の 1 行だけの変更で 全部の段が回らない事を 確立点として確かめる)
-    - demaetei・amatelas・daikokuten・ccark (kifune の確立点の後。全部の stack を同時に)
-  per_project_done:
-    - 外を直に呼ぶ code が無い (全部の stack の lint が通る)
-    - test が mock だけで回る (project の test は 実物を触らない)
-    - cache_test.txt の 1 行だけの変更で 全部の段 (BE・FE・proto・infra) が 回らない (前の PASS の記録に当たる)
 open:
-  - Go の FS の method の最小の組 (kifune の付け替えで 足りない物が出たら MINOR で足す)
+  - Go の FS の method の最小の組 (足りない物は MINOR で足す)
   - 全 project の版の食い違いを名指す口を どこに置くか
   - TypeScript の取得の仕組み (clone の形) と 版の記録の形
