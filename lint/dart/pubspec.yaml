@@ -1,0 +1,13 @@
+name: outside_lint
+description: outside の Dart の lint (外を直に呼ぶ code を落とす)。
+version: 0.3.0
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  analyzer: ^8.4.0
+
+dev_dependencies:
+  test: ^1.25.0

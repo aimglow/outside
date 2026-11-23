@@ -88,6 +88,12 @@ cases:
     input: lint/ts/testdata/bad (禁じた呼び出し 11 個) と testdata/good (口を受け取る code)
     expect: bad は 11 個とも誤り。good は 誤り 0。
 
+  - id: TC-OUT-LINT-DART
+    requirement: REQ-OUT-LINT
+    behavior: Dart の lint は 外を直に呼ぶ code を行ごとに名指し 口を通す code と 決めた時刻の DateTime を通す。読めない source は 判定不能。
+    input: lint/dart/testdata/bad (禁じた呼び出し 8 個) と testdata/good と 構文の誤った source
+    expect: bad は 8 個とも 行と名前で名指される (CLI は exit 1)。good は 0 件 (exit 0)。読めない source は 例外 (CLI は exit 3)。
+
   - id: TC-OUT-PARITY
     requirement: REQ-OUT-PARITY
     behavior: Go・TypeScript・Dart の port と method の名前の組が 設計書の ports の節と一致する。

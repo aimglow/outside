@@ -159,10 +159,10 @@ lint:
              localStorage, sessionStorage, "import fs", "import child_process"]
     except: この部品の real の module
   dart:
-    tool: analyzer の lint か custom_lint
-    forbid: [DateTime.now, Platform.environment, "dart:io の File・Process の直呼び"]
-    except: この部品の real の library
-    undecided: Dart の lint で どこまで止められるかは 実物で確かめていない。確かめた結果で この節を直す。
+    tool: lint/dart の outside_lint (package:analyzer の構文木を読む。`dart run outside_lint:check <dir>`。exit 0 = 違反なし / 1 = 違反 / 3 = 読めない file = 判定不能)
+    forbid: [DateTime.now, Platform.environment, Process.run・runSync・start, "File(...)", "Directory(...)", Directory.systemTemp, Directory.current, "HttpClient(...)", "Timer(...)"]
+    except: この部品の real の library と lint 自身 (対象の dir に渡さない)
+    limit: 型を解決しない構文木で読む = 別名の import (import 'dart:io' as io の io.File 等) は名指せない。見つけたら この一覧に足す。
 
 layout:
   go: go/            # module = github.com/aimglow/outside/go、 mock = go/outsidemock
@@ -199,6 +199,5 @@ adoption:
     - 台帳に記帳でき cache の確かめで その package が回らない
 
 open:
-  - Dart の lint の実力 (lint の節の undecided)
   - Go の FS の method の最小の組 (kifune の付け替えで 足りない物が出たら MINOR で足す)
   - 全 project の版の食い違いを名指す口を どこに置くか
