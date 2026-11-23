@@ -194,15 +194,14 @@ delivery:
   consequence: 確かめは commit の前に 手元で回す。壊れた版を tag にしない。
 
 adoption:
+  scope: project の全部の stack を 同時に扱う (BE・ツール = Go / FE = TypeScript (Nx・Next.js・Angular) / mobile = Dart (Flutter) / proto / infra (DB の migration・deploy の宣言・container))。stack の順に分けない。
   order:
-    - kifune (Go。time.Now を直に書くと build が落ちる事を 1 回 確かめる)
-    - demaetei・amatelas・daikokuten (Go、次に TypeScript・Dart)
-    - ccark
-  per_package_done:
-    - 外を直に呼ぶ code が無い (lint が通る)
-    - test が mock だけで回る
-    - 台帳に記帳でき cache の確かめで その package が回らない
-
+    - kifune (全部の stack。cache_test.txt の 1 行だけの変更で 全部の段が回らない事を 確立点として確かめる)
+    - demaetei・amatelas・daikokuten・ccark (kifune の確立点の後。全部の stack を同時に)
+  per_project_done:
+    - 外を直に呼ぶ code が無い (全部の stack の lint が通る)
+    - test が mock だけで回る (project の test は 実物を触らない)
+    - cache_test.txt の 1 行だけの変更で 全部の段 (BE・FE・proto・infra) が 回らない (前の PASS の記録に当たる)
 open:
   - Go の FS の method の最小の組 (kifune の付け替えで 足りない物が出たら MINOR で足す)
   - 全 project の版の食い違いを名指す口を どこに置くか
