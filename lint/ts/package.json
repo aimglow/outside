@@ -1,0 +1,7 @@
+{
+  "name": "@aimglow/outside-lint",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test lint.test.js" },
+  "devDependencies": { "eslint": "^9.0.0" }
+}

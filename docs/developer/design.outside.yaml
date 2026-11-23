@@ -153,7 +153,8 @@ lint:
              os.Remove, os.RemoveAll, os.Mkdir, os.MkdirAll, os.Rename]
     except: この部品の real (利用する project では outside は依存の module なので lint の対象に入らない)
   typescript:
-    tool: ESLint (no-restricted-syntax・no-restricted-globals・no-restricted-imports)
+    tool: ESLint (no-restricted-syntax・no-restricted-globals・no-restricted-properties・no-restricted-imports)
+    config: lint/ts/eslint.config.js (flat config の配列。project の eslint.config.js が取り込んで足す)
     forbid: [Date.now, "new Date() (引数なし)", setTimeout, setInterval, process.env, fetch,
              localStorage, sessionStorage, "import fs", "import child_process"]
     except: この部品の real の module

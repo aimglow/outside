@@ -82,6 +82,12 @@ cases:
     input: 部品の外の package で time.Now を呼ぶ source・部品の real で呼ぶ source
     expect: 前者は lint が誤りを出す。後者は 通る。
 
+  - id: TC-OUT-LINT-TS
+    requirement: REQ-OUT-LINT
+    behavior: TypeScript の lint の設定は 外を直に呼ぶ code (Date.now・引数なしの new Date・setTimeout・setInterval・process.env・fetch・localStorage・sessionStorage・window/globalThis 越しの同じ物・fs と child_process の import) を落とし 口を通す code と 決めた時刻の Date を通す。
+    input: lint/ts/testdata/bad (禁じた呼び出し 11 個) と testdata/good (口を受け取る code)
+    expect: bad は 11 個とも誤り。good は 誤り 0。
+
   - id: TC-OUT-PARITY
     requirement: REQ-OUT-PARITY
     behavior: Go・TypeScript・Dart の port と method の名前の組が 設計書の ports の節と一致する。
