@@ -87,6 +87,9 @@ type Cmd struct {
 	Dir string
 	// Env は 子 process に足す環境変数 (NAME=値)。
 	Env []string
+	// Stdin は 子 process の標準入力に渡す中身。nil なら 何も渡さない。
+	// 秘密 (鍵・password) を disk にも argv にも載せずに渡す時に使う。
+	Stdin []byte
 }
 
 // Result は 子 process の結果。0 以外の ExitCode も 誤りではなく Result で返る。

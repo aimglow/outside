@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -37,6 +38,10 @@ func helperMain(args []string) {
 	case "exit":
 		n, _ := strconv.Atoi(args[1])
 		os.Exit(n)
+	case "cat":
+		b, _ := io.ReadAll(os.Stdin)
+		os.Stdout.Write(b)
+		os.Exit(0)
 	}
 	os.Exit(64)
 }
@@ -401,6 +406,14 @@ func procContract(t *testing.T, p outside.Proc, prefix []string) {
 	if err != nil || res.ExitCode != 0 || string(res.Stdout) != "hi there" {
 		t.Errorf("echo = %+v, %v", res, err)
 	}
+	res, err = p.Run(ctx, outside.Cmd{Name: "helper", Args: args("cat"), Stdin: []byte("secret\nline2")})
+	if err != nil || res.ExitCode != 0 || string(res.Stdout) != "secret\nline2" {
+		t.Errorf("stdin = %+v, %v", res, err)
+	}
+	res, err = p.Run(ctx, outside.Cmd{Name: "helper", Args: args("cat")})
+	if err != nil || res.ExitCode != 0 || len(res.Stdout) != 0 {
+		t.Errorf("stdin 無し = %+v, %v", res, err)
+	}
 	res, err = p.Run(ctx, outside.Cmd{Name: "helper", Args: args("exit", "3")})
 	if err != nil || res.ExitCode != 3 {
 		t.Errorf("exit 3 = %+v, %v", res, err)
@@ -428,10 +441,20 @@ func TestContract_TC_OUT_CONTRACT_Proc(t *testing.T) {
 			case "exit":
 				n, _ := strconv.Atoi(c.Args[2])
 				return outside.Result{ExitCode: n}
+			case "cat":
+				return outside.Result{Stdout: append([]byte(nil), c.Stdin...)}
 			}
 			return outside.Result{ExitCode: 64}
 		}
-		procContract(t, outsidemock.NewProc(map[string]func(outside.Cmd) outside.Result{"helper": helper}), prefix)
+		p := outsidemock.NewProc(map[string]func(outside.Cmd) outside.Result{"helper": helper})
+		procContract(t, p, prefix)
+		var stdins []string
+		for _, c := range p.Cmds() {
+			stdins = append(stdins, string(c.Stdin))
+		}
+		if !reflect.DeepEqual(stdins, []string{"", "secret\nline2", "", "", ""}) {
+			t.Errorf("記録の Stdin = %q", stdins)
+		}
 	})
 }
 

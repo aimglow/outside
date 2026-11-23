@@ -3,6 +3,7 @@ package outsidemock
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/aimglow/outside/go"
 )
@@ -11,6 +12,22 @@ import (
 type Proc struct {
 	recorder
 	programs map[string]func(outside.Cmd) outside.Result
+	mu       sync.Mutex
+	cmds     []outside.Cmd
+}
+
+// Cmds は 起こされた Cmd を 起こされた順に返す (Stdin・Env・Dir まで test から読める)。
+func (p *Proc) Cmds() []outside.Cmd {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]outside.Cmd, len(p.cmds))
+	for i, c := range p.cmds {
+		c.Args = append([]string(nil), c.Args...)
+		c.Env = append([]string(nil), c.Env...)
+		c.Stdin = append([]byte(nil), c.Stdin...)
+		out[i] = c
+	}
+	return out
 }
 
 // NewProc は programs (名前 → 結果を決める関数) を宣言した Proc を返す。
@@ -31,6 +48,9 @@ func Fixed(r outside.Result) func(outside.Cmd) outside.Result {
 // Run は 記録して 決めた結果を返す。記録の Args は 名前に続けて 引数。
 func (p *Proc) Run(ctx context.Context, cmd outside.Cmd) (outside.Result, error) {
 	p.record("Run", append([]string{cmd.Name}, cmd.Args...)...)
+	p.mu.Lock()
+	p.cmds = append(p.cmds, cmd)
+	p.mu.Unlock()
 	fn, ok := p.programs[cmd.Name]
 	if !ok {
 		return outside.Result{}, fmt.Errorf("%w: %s", outside.ErrUndeclaredProgram, cmd.Name)

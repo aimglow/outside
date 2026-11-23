@@ -88,7 +88,7 @@ ports:
     - name: FS
       does: 宣言した根の下の file を読む・書く・一覧する。
       methods: [ReadFile, WriteFile, ReadDir, Stat, Remove]
-      rule: 根の外の path は 誤り。
+      rule: 根の外の path は 誤り。IOFS(FS) は io/fs.FS として読ませる (io/fs を受ける値の関数へ渡す)。
       mock: memory の上の木。
     - name: Git
       does: 宣言した木の git の問いに答える (head の sha・追跡下の一覧・merge-base・差分の file・ref の sha・ある rev の木の一覧と中身)。
@@ -98,8 +98,8 @@ ports:
     - name: Proc
       does: 宣言した名前の program を起こし 結果を返す。
       methods: [Run]
-      rule: tool-environment に無い program は 誤り。
-      mock: 起こされた引数を記録し 決めた結果を返す。
+      rule: tool-environment に無い program は 誤り。Cmd の Stdin は 子 process の標準入力に渡す (秘密を disk にも argv にも載せずに渡す)。
+      mock: 起こされた Cmd (引数・Stdin・Env・Dir) を記録し 決めた結果を返す。
     - name: Workdir
       does: 宣言した置き場の下に 作業場を作り 終わりに消す。作った作業場を根にした FS を返す。
       methods: [New, Path, Cleanup, FS]

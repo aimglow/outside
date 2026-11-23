@@ -72,9 +72,16 @@ cases:
     behavior: 口ごとの契約の test を real と mock の両方に掛け 両方が通る。
     input: 口ごとの契約 (例 Clock = Now は戻らない / FS = 書いた中身が読める・根の外は誤り / Env = 無い名前は 無い /
       Git = Resolve が ref を sha に引く・ListAt が rev の木の直下を返し 無い dir は空・ReadAt が rev の中身を返し 無い path は fs.ErrNotExist /
+      Proc = Stdin が子 process の標準入力に届き 無ければ空 /
       Workdir = 作った作業場の FS に書けて読め 根の外は誤り・作っていない作業場の FS は誤り)
     note: real に掛ける時は test が自分で作った物 (自分で作った dir・自分で起こした子 process) だけを触る。
     expect: 同じ契約の test が real でも mock でも通る。片方だけ落ちる項目は 名前を出して 誤り。
+
+  - id: TC-OUT-IOFS
+    requirement: REQ-OUT-INJECT
+    behavior: IOFS は FS を io/fs の決まり (fstest.TestFS) どおりに読ませる。
+    input: mock の FS (file 3 つと 入れ子の dir)
+    expect: fstest.TestFS が通る。
 
   - id: TC-OUT-LINT-GO
     requirement: REQ-OUT-LINT

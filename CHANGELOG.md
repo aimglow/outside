@@ -43,3 +43,14 @@
 - 足した: Dart の lint `lint/dart` (`dart run outside_lint:check <dir>`。DateTime.now・Platform.environment・Process.run 等・File(...)・Directory(...)・Directory.systemTemp・HttpClient(...)・Timer(...) を 行で名指す。exit 0 / 1 / 3 = 判定不能)。
 
 利用する project がやる事: 取り込む版を v0.4.0 に上げ、TypeScript は project の eslint.config.js に取り込み、Dart は 段で `dart run outside_lint:check lib` を回す。Go の lint は v0.2.0 から在る。
+
+## v0.5.0 (2026-11-23)
+
+足した project = kifune (#244 の tools/secretprobe の付け替え)。
+
+- 足した: Proc の `Cmd.Stdin` (子 process の標準入力。秘密を disk にも argv にも載せずに渡す)。mock の Proc は 起こされた Cmd を `Cmds()` で返す (Stdin・Env・Dir まで test から読める)。
+- 足した: `IOFS(FS)` (FS を io/fs.FS として読ませる)。kifune が tools/internal/iofs に作った口を 部品へ移した。
+- 足した: lint の module の tag `lint/go/v0.5.0` (取り込む project は 版の代わりの仮の番号 (pseudo-version) を使わずに済む)。
+
+利用する project がやる事: go.mod の outside を v0.5.0 に上げ、lint の module を `lint/go/v0.5.0` で取る。kifune は tools/internal/iofs を `outside.IOFS` に置き換える。
+
