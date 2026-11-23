@@ -34,3 +34,12 @@
 - 決めた: 版の番号の意味 (0.x = どの project の main にも まだ入っていない間 / 1.0.0 = 最初の project の main に入る時)。
 
 利用する project がやる事: 写しを v0.3.0 に差し替える (0.x の間は 意味を変える変更も MINOR = 版の意味は 設計書 versioning.meaning)。`ExitCode` の 2 を判定不能として読んでいる所は 3 に直す。Git・Workdir を自分で実装している型は 足した method を実装する (outside の mock を使っていれば 不要)。今 写しを持つのは kifune の branch だけ = kifune の #244 で 差し替える。
+
+## v0.4.0 (2026-11-23)
+
+足した project = なし (全 project が取り込む lint を そろえた)。
+
+- 足した: TypeScript の lint の設定 `lint/ts/eslint.config.js` (ESLint の flat config。Date.now・引数なしの new Date・setTimeout・setInterval・process.env・fetch・localStorage・sessionStorage・window / globalThis 越しの同じ物・fs と child_process の import を落とす)。
+- 足した: Dart の lint `lint/dart` (`dart run outside_lint:check <dir>`。DateTime.now・Platform.environment・Process.run 等・File(...)・Directory(...)・Directory.systemTemp・HttpClient(...)・Timer(...) を 行で名指す。exit 0 / 1 / 3 = 判定不能)。
+
+利用する project がやる事: 写しを v0.4.0 に差し替え、TypeScript は project の eslint.config.js に取り込み、Dart は 段で `dart run outside_lint:check lib` を回す。Go の lint は v0.2.0 から在る。
