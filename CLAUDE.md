@@ -15,14 +15,21 @@ outside は 全 project が module として取り込む共通部品である。
 - push の前に 手元で 全部の test と lint を回す。通らない物を push しない。
 - 版は git の tag で切る (`vMAJOR.MINOR.PATCH`、Go の module は `go/vMAJOR.MINOR.PATCH`)。
   壊れた版を tag にしない。tag は動かさない (直しは 次の版)。
-- main は 常に 最新の版にしておく: main の先頭は 最新の版の tag と同じ commit。
+- main は 常に 最新の版にしておく: main の code (go/・ts/・dart/・lint/) は 最新の版の tag と同じ。tag の後に main へ入ってよいのは 文書だけ。
   code (go/・ts/・dart/・lint/) を変える変更は 版を上げて tag を切るまでを 1 つの作業として済ませ、
   tag の無い code の変更を main に残さない。文書だけの変更は 版を上げない。
 - commit の message は 何を・なぜ を 1 行目に書く。
 
 ## 使われ方
 
-- 利用する project は この repo を 版を固定した module として取り込む。
+- 利用する project は この repo を 版を固定した module として取り込む (持ち主の決め = ccark #9758 の comment『決めた進め方』)。
+  - Go と Dart は 版の git の tag を指す依存として書く (Go = go.mod の `require github.com/aimglow/outside/go vX.Y.Z`、
+    Dart = pubspec の git 依存の `ref: vX.Y.Z`)。project の中に この repo の file を複製しない。
+  - TypeScript は Nx の共有 library として 版の git の tag から取得して置く。取得の仕組み (clone の形) と 版の記録の形は 未決
+    (kifune で確かめて この節に書く)。
+  - git から取得するのは ccark-gitops の名義。seat の検査も image の build (gitops) も この名義で取る。
+    人の資格も project ごとの道具も使わない。
+  - 取り込み方を書く時は 仕組みの名前 (module の取り込み・git clone・file の複製) で書く。「写し」と書かない (仕組みが隠れる)。
 - project の code は 外を直に呼ばず この部品の口 (port) を通す。
 - 版は tag で固定して使う。main を追わない。全 project が 同じ版を使う。
 - project に入れた この部品は project の中で編集しない。直すのは この repo だけ。
@@ -37,7 +44,7 @@ project の検査が 変わった物に依る分だけ回る (4) image の build
 
 ## 部品の足し方
 
-- 口や method が足りなくなったら 必要になった project が この repo に足す (project の中の写しには足さない)。
+- 口や method が足りなくなったら 必要になった project が この repo に足す (project の中に置いた物には足さない)。
 - 足す順 = 設計書 (ports の節) → テスト仕様 → 実装 (Go・TypeScript・Dart で 要る言語) → 本物と mock の契約の test → 版を上げて tag。
 - 版の番号の意味は 設計書の versioning.meaning が決める。0.x (どの project の main にも まだ入っていない間) は 意味を変える変更も MINOR。
   1.0.0 (最初の project の main に入る時) から: 足すだけの変更は MINOR (前の版を使う project を壊さない)。意味を変える・消す変更は MAJOR。
@@ -54,7 +61,7 @@ project の検査が 変わった物に依る分だけ回る (4) image の build
 
 - MAJOR は 全 project が同時に上げる。切る前に 全 project の project-manager と 上げる時期を合わせる。
 - MINOR は 前の版のままでも動く。ただし 版がずれた project は 定時の報告で名指され 次に触る時に揃える。
-- project が 今どの版を使っているかは project の中の写しに置いた 版の記録 (1 行) で読む。
+- project が 今どの版を使っているかは Go = go.mod・Dart = pubspec.lock の 版で読む。TypeScript は 版の記録の形が未決。
 
 ## 外への access と test の置き場
 
@@ -64,7 +71,7 @@ project の検査が 変わった物に依る分だけ回る (4) image の build
   機体に元から在る物 (機体の環境変数・/tmp に在る file・手元の repo) を読まない。
 - 利用する project の test は 実物を触らない。この部品の mock を渡す。
 - この部品自身の test は この repo の中で回す。利用する project の中では回さない
-  (project に写すのは 実装と mock だけ。project の検査は project の code を確かめる)。
+  (Go と Dart の依存の test は project の検査に入らない。TypeScript で 共有 library の中の test を検査から外す仕組みは 未決)。
 
 ## mock の決め
 
@@ -86,5 +93,5 @@ mock = test にとって有用で妥当な 決めた値を返す 口の実装。
 
 - repo の外の絶対 path。
 - system の一時置き場 (/tmp・os.TempDir・MkdirTemp("")) を前提にした処理。
-- secret の値を 作業場へ写す処理。
+- secret の値を 作業場へ複製する処理。
 - 文書の文を確かめる test。

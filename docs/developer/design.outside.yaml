@@ -65,7 +65,7 @@ requirements:
   - id: REQ-OUT-NO-ABSPATH
     text: repo の外の絶対 path を code と test に書かない。置き場は tool-environment の宣言から受け取る。
   - id: REQ-OUT-SECRET
-    text: secret の値を 作業場へ写さない。secret を読む口は 値を返すだけで 置き場を作らない。
+    text: secret の値を 作業場へ複製しない。secret を読む口は 値を返すだけで 置き場を作らない。
   - id: REQ-OUT-PARITY
     text: port の名前と意味は Go・TypeScript・Dart で同じ。この設計書の ports の節が唯一の定義。
   - id: REQ-OUT-SAME-VERSION
@@ -182,7 +182,12 @@ versioning:
     - port の method を消す・意味を変える = MAJOR
     - port か method を足す = MINOR
     - 振る舞いを変えない直し = PATCH
-  consume: Go は module の版、TypeScript と Dart は git の tag を指す。有料の registry を使わない。
+  consume:
+    go: module として 版の git の tag を指す (go.mod の require)。project の中に file を複製しない。
+    dart: pubspec の git 依存で 版の tag を指す (ref)。
+    typescript: Nx の共有 library として 版の git の tag から取得して置く。取得の仕組み (clone の形) と 版の記録の形は 未決。
+    fetch_identity: git から取得するのは ccark-gitops の名義 (seat の検査も image の build (gitops) も 同じ)。
+    registry: 有料の registry にも 公開の registry にも 登録しない。
 
 delivery:
   flow: main へ直に commit して push する。この repo は CI・便・gate を持たない (持ち主の決め 2026-11-23)。
@@ -201,3 +206,4 @@ adoption:
 open:
   - Go の FS の method の最小の組 (kifune の付け替えで 足りない物が出たら MINOR で足す)
   - 全 project の版の食い違いを名指す口を どこに置くか
+  - TypeScript の取得の仕組み (clone の形) と 版の記録の形
