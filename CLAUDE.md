@@ -29,7 +29,6 @@ outside は 全 project が module として取り込む共通部品である。
     (kifune で確かめて この節に書く)。
   - git から取得するのは ccark-gitops の名義。seat の検査も image の build (gitops) も この名義で取る。
     人の資格も project ごとの道具も使わない。
-  - 取り込み方を書く時は 仕組みの名前 (module の取り込み・git clone・file の複製) で書く。「写し」と書かない (仕組みが隠れる)。
 - project の code は 外を直に呼ばず この部品の口 (port) を通す。
 - 版は tag で固定して使う。main を追わない。全 project が 同じ版を使う。
 - project に入れた この部品は project の中で編集しない。直すのは この repo だけ。
