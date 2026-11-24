@@ -9,16 +9,19 @@ import (
 	"github.com/aimglow/outside/go"
 )
 
+// Func は ctx を受けて 結果を決める関数 (WithFunc で宣言する)。実の process・実時間を使わない。
+type Func func(ctx context.Context, c outside.Cmd) (outside.Result, error)
+
 // Proc は mock の子 process。起こされた内容を記録し 決めた結果を返す。program を起こさない。
 type Proc struct {
 	recorder
-	programs map[string]func(outside.Cmd) outside.Result
 	mu       sync.Mutex
+	programs map[string]Func
 	paths    map[string]string
 	cmds     []outside.Cmd
 }
 
-// Cmds は 起こされた Cmd を 起こされた順に返す (Stdin・Env・Dir まで test から読める)。
+// Cmds は 起こされた Cmd を 起こされた順に返す (Stdin・Env・Dir・KillGroup・KillGrace まで test から読める)。
 func (p *Proc) Cmds() []outside.Cmd {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -35,11 +38,26 @@ func (p *Proc) Cmds() []outside.Cmd {
 // NewProc は programs (名前 → 結果を決める関数) を宣言した Proc を返す。
 // 関数が nil の名前は 空の結果 (exit 0) を返す。
 func NewProc(programs map[string]func(outside.Cmd) outside.Result) *Proc {
-	m := make(map[string]func(outside.Cmd) outside.Result, len(programs))
+	m := make(map[string]Func, len(programs))
 	for k, v := range programs {
-		m[k] = v
+		if v == nil {
+			m[k] = nil
+			continue
+		}
+		fn := v
+		m[k] = func(_ context.Context, c outside.Cmd) (outside.Result, error) { return fn(c), nil }
 	}
 	return &Proc{programs: m}
+}
+
+// WithFunc は name を ctx を受ける関数 fn で宣言し p を返す (同じ名前の前の宣言は 置き換わる)。
+// fn が nil なら 空の結果 (exit 0) を返す。fn の前か後に ctx が終わっていれば Run は Killed = true と ctx の誤りを返す
+// (fn は ctx.Done() を待って 止められる子を表せる)。
+func (p *Proc) WithFunc(name string, fn Func) *Proc {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.programs[name] = fn
+	return p
 }
 
 // WithPaths は LookPath が返す path (名前 → 実行 file の path) を渡し p を返す。前に渡した表は 置き換わる。
@@ -55,14 +73,14 @@ func (p *Proc) WithPaths(paths map[string]string) *Proc {
 	return p
 }
 
-// LookPath は WithPaths で渡した path を返す。NewProc で宣言していない名前は ErrUndeclaredProgram。
+// LookPath は WithPaths で渡した path を返す。NewProc・WithFunc で宣言していない名前は ErrUndeclaredProgram。
 func (p *Proc) LookPath(name string) (string, error) {
 	p.record("LookPath", name)
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if _, ok := p.programs[name]; !ok {
 		return "", fmt.Errorf("%w: %s", outside.ErrUndeclaredProgram, name)
 	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	if file, ok := p.paths[name]; ok && file != "" {
 		return file, nil
 	}
@@ -75,20 +93,26 @@ func Fixed(r outside.Result) func(outside.Cmd) outside.Result {
 }
 
 // Run は 記録して 決めた結果を返す。記録の Args は 名前に続けて 引数。
+// ctx が 関数の前か後に終わっていれば Result.Killed = true と ctx の誤りを返す。
 func (p *Proc) Run(ctx context.Context, cmd outside.Cmd) (outside.Result, error) {
 	p.record("Run", append([]string{cmd.Name}, cmd.Args...)...)
 	p.mu.Lock()
 	p.cmds = append(p.cmds, cmd)
-	p.mu.Unlock()
 	fn, ok := p.programs[cmd.Name]
+	p.mu.Unlock()
 	if !ok {
 		return outside.Result{}, fmt.Errorf("%w: %s", outside.ErrUndeclaredProgram, cmd.Name)
 	}
 	if err := ctx.Err(); err != nil {
-		return outside.Result{}, err
+		return outside.Result{Killed: true}, err
 	}
 	if fn == nil {
 		return outside.Result{}, nil
 	}
-	return fn(cmd), nil
+	res, err := fn(ctx, cmd)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		res.Killed = true
+		return res, ctxErr
+	}
+	return res, err
 }

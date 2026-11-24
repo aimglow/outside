@@ -31,7 +31,14 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// helperExtra は OS に依る helper の役 (名前 → 振る舞い)。build tag の付いた test の file が init で足す。
+var helperExtra = map[string]func(args []string){}
+
 func helperMain(args []string) {
+	if fn, ok := helperExtra[args[0]]; ok {
+		fn(args[1:])
+		os.Exit(0)
+	}
 	switch args[0] {
 	case "echo":
 		fmt.Print(strings.Join(args[1:], " "))

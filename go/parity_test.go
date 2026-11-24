@@ -14,7 +14,7 @@ import (
 var designPorts = map[string][]string{
 	"Clock":   {"Now", "Sleep", "NewTimer", "NewTicker", "After"},
 	"Env":     {"Lookup"},
-	"FS":      {"ReadFile", "WriteFile", "ReadDir", "Stat", "Remove", "Open", "AppendFile", "MkdirAll", "Lstat", "Rename", "RemoveAll"},
+	"FS":      {"ReadFile", "WriteFile", "ReadDir", "Stat", "Remove", "Open", "AppendFile", "MkdirAll", "Lstat", "Rename", "RemoveAll", "Symlink", "Readlink"},
 	"Proc":    {"Run", "LookPath"},
 	"Workdir": {"New", "Path", "Cleanup", "FS"},
 	"SysInfo": {"Hostname", "HomeDir", "Pid", "IsTTY"},

@@ -14,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/aimglow/outside/go/internal/rule"
@@ -266,6 +267,57 @@ func (f realFS) RemoveAll(p string) error {
 	return r.RemoveAll(c)
 }
 
+// Symlink は 同じ dir に 一時の名前で symlink を作り Rename で link へ付け替える (途中で link が無い時を作らない)。
+// 付け替えに失敗したら 一時の物を消す。target は 文字列のまま渡す (os.Root.Symlink は target を確かめない)。
+func (f realFS) Symlink(target, link string) error {
+	r, c, err := f.open(link)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if c == "." {
+		return symlinkErr(c, errors.New("根は link にできない"))
+	}
+	if target == "" {
+		return symlinkErr(c, errors.New("target が空"))
+	}
+	if info, err := r.Lstat(c); err == nil {
+		if info.Mode()&fs.ModeSymlink == 0 {
+			if info.IsDir() {
+				return symlinkErr(c, errors.New("link に dir が在る"))
+			}
+			return symlinkErr(c, errors.New("link に file が在る"))
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	tmp := path.Join(path.Dir(c), "."+path.Base(c)+".outside-link-"+hex.EncodeToString(b[:]))
+	if err := r.Symlink(target, tmp); err != nil {
+		return err
+	}
+	if err := r.Rename(tmp, c); err != nil {
+		_ = r.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// symlinkErr は Symlink が 自分で止めた誤り (mock と同じ形)。
+func symlinkErr(link string, err error) error {
+	return &fs.PathError{Op: "symlink", Path: link, Err: err}
+}
+
+func (f realFS) Readlink(p string) (string, error) {
+	r, c, err := f.open(p)
+	if err != nil {
+		return "", err
+	}
+	defer r.Close()
+	return r.Readlink(c)
+}
+
 type realSysInfo struct{}
 
 // NewSysInfo は 動いている機体と process の値を返す口を返す。
@@ -385,6 +437,7 @@ func (p realProc) LookPath(name string) (string, error) {
 }
 
 // Run は 子 process を起こす。子は 親の環境変数に cmd.Env を足した物を受ける。
+// ctx の終わりで止めた時は Result.Killed = true で 誤りは ctx の誤りを包む。
 func (p realProc) Run(ctx context.Context, c Cmd) (Result, error) {
 	file, ok := p.programs[c.Name]
 	if !ok {
@@ -405,10 +458,43 @@ func (p realProc) Run(ctx context.Context, c Cmd) (Result, error) {
 	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	// stop は ctx の終わりで 止めに入ったかを持つ (exec の Cancel は 別の goroutine から呼ばれる)。
+	stop := &procStop{}
+	var group *killGroup
+	if c.KillGroup {
+		grace := c.KillGrace
+		if grace <= 0 {
+			grace = defaultKillGrace
+		}
+		g, err := newKillGroup(cmd, grace, stop)
+		if err != nil {
+			return Result{}, fmt.Errorf("outside: program %s: %w", c.Name, err)
+		}
+		group = g
+	} else {
+		cmd.Cancel = func() error {
+			err := cmd.Process.Kill()
+			if err == nil {
+				stop.mark()
+			}
+			return err
+		}
+	}
 	err := cmd.Run()
+	if group != nil {
+		group.finish()
+	}
 	res := Result{Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}
+	// 起こす前に ctx が終わっていた時 (cmd.Process が無い) も ctx の終わりで止めた事にする。
+	if ctxErr := ctx.Err(); ctxErr != nil && (stop.marked() || cmd.Process == nil) {
+		res.Killed = true
+		if err != nil && errors.Is(err, ctxErr) {
+			return res, fmt.Errorf("outside: program %s: %w", c.Name, err)
+		}
+		return res, fmt.Errorf("outside: program %s を ctx の終わりで止めた: %w (%v)", c.Name, ctxErr, err)
+	}
 	var ee *exec.ExitError
-	if errors.As(err, &ee) && ee.ExitCode() >= 0 && ctx.Err() == nil {
+	if errors.As(err, &ee) && ee.ExitCode() >= 0 {
 		res.ExitCode = ee.ExitCode()
 		return res, nil
 	}
@@ -416,6 +502,34 @@ func (p realProc) Run(ctx context.Context, c Cmd) (Result, error) {
 		return res, fmt.Errorf("outside: program %s: %w", c.Name, err)
 	}
 	return res, nil
+}
+
+// procStop は ctx の終わりで 止めに入った (signal を送った) かを持つ。
+type procStop struct {
+	mu   sync.Mutex
+	done bool
+	at   time.Time
+}
+
+func (s *procStop) mark() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.done {
+		s.done, s.at = true, time.Now()
+	}
+}
+
+func (s *procStop) marked() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.done
+}
+
+// since は 止めに入った時刻を返す。入っていなければ false。
+func (s *procStop) since() (time.Time, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.at, s.done
 }
 
 type realWorkdir struct {

@@ -347,6 +347,23 @@ func (f limitFS) RemoveAll(p string) error {
 	return f.inner.RemoveAll(c)
 }
 
+// Symlink は link の path だけを確かめる (target は 文字列のまま記録される。辿る時に 根の外は誤り)。
+func (f limitFS) Symlink(target, link string) error {
+	c, err := f.check(link)
+	if err != nil {
+		return err
+	}
+	return f.inner.Symlink(target, c)
+}
+
+func (f limitFS) Readlink(p string) (string, error) {
+	c, err := f.check(p)
+	if err != nil {
+		return "", err
+	}
+	return f.inner.Readlink(c)
+}
+
 // limitProc は 宣言した program だけを起こさせる。
 type limitProc struct {
 	inner Proc

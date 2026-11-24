@@ -97,6 +97,13 @@ type FS interface {
 	Rename(from, to string) error
 	// RemoveAll は path を 中身ごと消す。無い path は 誤りでない。根は 消せない (誤り)。
 	RemoveAll(path string) error
+	// Symlink は 根の中の link に target を指す symlink を作る。target は 文字列のまま記録する
+	// (根の外を指す target も 作るだけなら誤りでない。辿る操作が 根の外を誤りにする)。
+	// link に symlink が在れば 貼り替える (一時の名前で作ってから付け替える = 途中で link が無い時を作らない)。
+	// link が file か dir なら 誤り。link の親の dir が無ければ 誤り (errors.Is(err, fs.ErrNotExist))。
+	Symlink(target, link string) error
+	// Readlink は link が指す target (Symlink に渡した文字列) を返す。symlink でなければ 誤り。
+	Readlink(link string) (string, error)
 }
 
 // SysInfo は 動いている機体と process の値を返す。
@@ -135,13 +142,24 @@ type Cmd struct {
 	// Stdin は 子 process の標準入力に渡す中身。nil なら 何も渡さない。
 	// 秘密 (鍵・password) を disk にも argv にも載せずに渡す時に使う。
 	Stdin []byte
+	// KillGroup が true なら 子を 新しい process group で起こし ctx が終わった時 group 全体 (孫まで) へ SIGTERM、
+	// KillGrace の後に まだ居れば SIGKILL を送る。false なら 子だけを止める。
+	// process group を持たない OS (unix でない) では 誤り (黙って子だけを止めない)。
+	KillGroup bool
+	// KillGrace は KillGroup の SIGTERM から SIGKILL までの猶予。0 以下は 5s。
+	KillGrace time.Duration
 }
+
+// defaultKillGrace は Cmd.KillGrace が 0 以下の時の猶予。
+const defaultKillGrace = 5 * time.Second
 
 // Result は 子 process の結果。0 以外の ExitCode も 誤りではなく Result で返る。
 type Result struct {
 	ExitCode int
 	Stdout   []byte
 	Stderr   []byte
+	// Killed は ctx の終わりで止めた時 true (その時 Run の誤りは ctx の誤りを包む)。子が自分で終えた時は false。
+	Killed bool
 }
 
 // Proc は 宣言した名前の program を起こし 結果を返す。宣言に無い名前は ErrUndeclaredProgram。
