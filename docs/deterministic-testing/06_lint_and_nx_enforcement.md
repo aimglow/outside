@@ -51,7 +51,7 @@ AI エージェントに規約を守らせる最大の鍵は、プロンプト�
 
 ## 2. TypeScript（Next.js / Angular）禁止構文・実機パス禁止 ESLint
 
-`libs/share/outside/**` および `**/adapters/**/real.ts` **以外**のすべてのファイル（ビジネスロジック、`fake.ts`、Unit テスト）に適用します。
+`libs/share/outside/**` および `**/adapters/**/real.ts` **以外**のすべてのファイル（ビジネスロジック、`mock.ts`、Unit テスト）に適用します。
 
 ```javascript
 // eslint.config.js（非決定要素・生IO・実機絶対パス禁止ルール）
@@ -151,32 +151,17 @@ issues:
 
 ---
 
-## 4. Dart / Flutter 禁止構文・実機パス検出スクリプト
+## 4. Dart / Flutter 禁止構文の検査（`outside_lint`）
 
-Dart は標準アナライザだけではメソッド単位の禁止が不十分なため、Nx の `lint` ターゲットに以下のスクリプトを組み込みます。
+Dart は標準アナライザだけではメソッド単位の禁止ができないため、`outside` の `lint/dart`（`outside_lint`、`package:analyzer` の構文木を読む）を Nx の `lint` ターゲットで回す。grep の正規表現より誤検出が無く、`DateTime.now`・`Platform.environment`・`Process.run` 等・`File(...)`・`Directory(...)`・`Directory.systemTemp`・`HttpClient(...)`・`Timer(...)` を行番号つきで名指す。
 
 ```bash
-#!/usr/bin/env bash
-# scripts/check-forbidden-dart.sh
-set -euo pipefail
-
-# libs/share/outside/flutter と *_real.dart と main.dart 以外を全スキャン
-TARGETS=$(find apps libs -type f -name "*.dart"   ! -path "libs/share/outside/flutter/*"   ! -name "*_real.dart"   ! -name "main.dart")
-
-if [[ -z "$TARGETS" ]]; then
-  exit 0
-fi
-
-PATTERN="import 'dart:io'|DateTime\.now\(\)|Process\.run|Directory\.current|Directory\.systemTemp|Platform\.(environment|script|localHostname)|Random\(|(/Users/|/home/|/var/|C:\\)"
-
-if echo "$TARGETS" | xargs grep -rnE "$PATTERN"; then
-  echo "ERROR: 禁止された生IO・現在時刻・環境依存パス・乱数が検出されました。" >&2
-  echo "       Outside または adapters/*_real.dart 経由に修正してください。" >&2
-  exit 1
-fi
+# libs/share/outside/flutter と *_real.dart と main.dart を除く全 Dart を検査する
+dart run outside_lint:check apps libs/share/adapters
+# exit 0 = 違反なし / 1 = 違反あり / 3 = 読めない file（判定不能）
 ```
 
----
+`*_real.dart` と `main.dart` は 検査の対象 dir から外すか 個別に除く。実機パスのハードコード（`/Users/` 等）は 同じ検査に足す。
 
 ## 5. Nx キャッシュ設定の最適化（`nx.json`）
 
@@ -192,7 +177,7 @@ fi
       "!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)",
       "!{projectRoot}/**/*_test.go",
       "!{projectRoot}/test/**/*_test.dart",
-      "!{projectRoot}/AGENTS.md"
+      "!{projectRoot}/CLAUDE.md"
     ],
     "sharedGlobals": [
       "{workspaceRoot}/nx.json",

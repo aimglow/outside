@@ -1,4 +1,4 @@
-# AGENTS.md — Nx ワークスペース テスト決定性・外部依存隔離 製造規約
+# CLAUDE.md — Nx ワークスペース テスト決定性・外部依存隔離 製造規約
 
 > 本ファイルは、本体ワークスペース（各アプリおよび `libs/share/adapters`）を担当する Claude Code（CC）が常時遵守すべき製造規約です。
 
@@ -18,22 +18,22 @@
 
 ### 分類 A：ロジックと振る舞いの検証（テストの 95% はこれ）
 - **目的:** 入力データに対して、ビジネスロジックや状態遷移が正しく動作するかを確認する。
-- **手段:** `libs/share/outside` と `adapters` の **`Fake`（固定値・インメモリ実装）** を注入し、時刻・ファイル・環境変数・ID・外部応答をすべて固定して検証する。
+- **手段:** `libs/share/outside` と `adapters` の **`Mock`（固定値・インメモリ実装）** を注入し、時刻・ファイル・環境変数・ID・外部応答をすべて固定して検証する。
 
 ### 分類 B：境界バリデーション・設定仕様の検証
 - **目的:** 必須環境変数の欠落時にエラーになるか、またはステージ指定に応じて正しい設定オブジェクト（Cookie 属性等）が組み立てられるかを検証する。
-- **手段:** 実環境の環境変数や `.env` を読んではならない。`FakeOutside` に**仮想環境変数マップ**（例: `setEnv('APP_STAGE', 'production')`）を注入し、設定組み立て関数またはバリデーション関数単体をテストせよ。
+- **手段:** 実環境の環境変数や `.env` を読んではならない。`MockOutside` に**仮想環境変数マップ**（例: `setEnv('APP_STAGE', 'production')`）を注入し、設定組み立て関数またはバリデーション関数単体をテストせよ。
 
 ### 分類 C：作成を禁止する「愚かなテスト」（DO NOT WRITE）
 以下に該当するテストは価値がなくキャッシュ破壊と保守コスト増大を招くため、**絶対に書いてはならない**。
 1. **実環境の一致確認テスト:**
    - 実機の `process.env` やローカル `.env` に特定キーが存在するかをアサートするテスト。
 2. **モックのオウム返しテスト（Tautological Test）:**
-   - `Fake` に `"ok"` をスタブ登録し、ビジネスロジックを通さずに単にそれを呼んで `"ok"` が返ることをアサートするテスト。
+   - `Mock` に `"ok"` をスタブ登録し、ビジネスロジックを通さずに単にそれを呼んで `"ok"` が返ることをアサートするテスト。
 3. **フレームワーク・標準ライブラリ内部挙動のテスト:**
    - Next.js ルーター、Angular DI、Flutter 標準 Widget、JSON シリアライザ自体の仕様テスト。
 4. **Unit テスト内での実外部接続:**
-   - 実 DB・実ファイル・実ソケット・外部 HTTP・実 CLI を叩くテスト。必要な場合は必ず `integration` タグ／別ファイル（`*.integration.spec.ts` / `//go:build integration` / `@Tags(['integration'])`）に隔離せよ。
+   - 実 DB・実ファイル・実ソケット・外部 HTTP・実 CLI を叩くテスト。アプリには書かない。実外部との結合が要るなら その境界を `adapters/` に切り出し、結合テストは `adapters/` の中に書け（`outside` の `Real` は `outside` リポジトリが確かめる）。
 
 ---
 
@@ -57,10 +57,10 @@
 ## 3. `adapters/` 実装および仮想パス・ソート規約
 
 1. **3 ファイル厳格分離:**
-   - 新規アダプタを作成する場合は、必ず `interface`・`real`（`*_real.go` / `*_real.dart`）・`fake`（`*_fake.go` / `*_fake.dart`）の 3 ファイルに分割すること。
-   - 生の外部 API・FW API の呼び出しは `real` ファイル内でのみ許可される。**`fake` ファイル内で現在時刻・乱数・実ファイル・実機パス取得関数を呼ぶことを固く禁ずる。**
+   - 新規アダプタを作成する場合は、必ず `interface`・`real`（`*_real.go` / `*_real.dart`）・`mock`（`*_mock.go` / `*_mock.dart`）の 3 ファイルに分割すること。
+   - 生の外部 API・FW API の呼び出しは `real` ファイル内でのみ許可される。**`mock` ファイル内で現在時刻・乱数・実ファイル・実機パス取得関数を呼ぶことを固く禁ずる。**
 2. **仮想パスの統一（実機絶対パスの禁止）:**
-   - テストおよび `Fake` 実装内のパスは、すべて `/virtual/` をルートとした論理パス（例: `"/virtual/config/app.json"`）を使用すること。`/Users/...`, `/home/...`, `C:\...` 等のハードコードを禁ずる。
+   - テストおよび `Mock` 実装内のパスは、すべて `/virtual/` をルートとした論理パス（例: `"/virtual/config/app.json"`）を使用すること。`/Users/...`, `/home/...`, `C:\...` 等のハードコードを禁ずる。
 3. **決定論的ソート規約（Go 必須）:**
    - Go で台帳データ・キャッシュキー・JSON 出力を生成する際、`map` を直接シリアライズまたは反復してハッシュ化してはならない。必ずスライスに変換し `slices.Sort` / `slices.SortFunc` で決定論的にソートしてから出力すること。
 
@@ -82,8 +82,8 @@
    - 対象ディレクトリ: libs/share/outside/(go | next | angular | flutter)
    - 追加したいOSプリミティブ概要:
    - 求めるシグネチャ案:
-   - Fake実装に求める振る舞い:
-   - 完了条件: Real/Fake両方のテストをPASSさせ、./scripts/release.sh で発行された新タグ名を返却すること。
+   - Mock実装に求める振る舞い:
+   - 完了条件: Real/Mock両方のテストをPASSさせ、./scripts/release.sh で発行された新タグ名を返却すること。
    ```
 3. **同期と再開:**
    - 返却された新タグ名（例: `v0.2.0`）を受け取ったら、`./scripts/sync-outside.sh <対象言語> <タグ>` を実行して展開ディレクトリをクリーン置換し、作業を再開せよ。
@@ -95,27 +95,27 @@
 ### 5.1 Go（`libs/share/outside/go`）
 ```go
 func TestDaemonHeartbeat(t *testing.T) {
-	env := outside.NewFake(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
-	env.Fake.SetEnv("DAEMON_MODE", "active")
+	env := outside.NewMock(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	env.Mock.SetEnv("DAEMON_MODE", "active")
 
 	d := NewDaemon(env)
 	d.Tick()
-	env.Fake.Clock.Advance(10 * time.Second)
+	env.Mock.Clock.Advance(10 * time.Second)
 	d.Tick()
 
-	// env.Fs や env.Fake.Cmd.History を検証
+	// env.Fs や env.Mock.Cmd.History を検証
 }
 ```
 
 ### 5.2 TypeScript — Next.js（`libs/share/outside/next`）
 ```typescript
 import { describe, it, expect } from 'vitest';
-import { createFakeOutside } from '@share/outside/next';
+import { createMockOutside } from '@share/outside/next';
 import { buildReport } from './buildReport';
 
 describe('buildReport', () => {
   it('固定時刻と仮想FSでレポートを生成できる', async () => {
-    const out = createFakeOutside('2026-01-01T00:00:00.000Z');
+    const out = createMockOutside('2026-01-01T00:00:00.000Z');
     out.setEnv('STAGE', 'prod');
     await out.fs.mkdir('/virtual/in', { recursive: true });
     await out.fs.writeFile('/virtual/in/data.txt', 'hello');
@@ -132,23 +132,23 @@ describe('buildReport', () => {
 ### 5.3 TypeScript — Angular（`libs/share/outside/angular`）
 ```typescript
 import { TestBed } from '@angular/core/testing';
-import { createFakeBrowserOutside } from '@share/outside/angular';
+import { createMockBrowserOutside } from '@share/outside/angular';
 import { BROWSER_OUTSIDE } from '../../core/tokens';
 import { PrefsService } from './prefs.service';
 
 describe('PrefsService', () => {
   it('仮想localStorageへ設定を保存できる', () => {
-    const fakeOut = createFakeBrowserOutside('2026-01-01T00:00:00.000Z');
+    const mockOut = createMockBrowserOutside('2026-01-01T00:00:00.000Z');
     TestBed.configureTestingModule({
       providers: [
         PrefsService,
-        { provide: BROWSER_OUTSIDE, useValue: fakeOut },
+        { provide: BROWSER_OUTSIDE, useValue: mockOut },
       ],
     });
 
     const service = TestBed.inject(PrefsService);
     service.saveTheme('dark');
-    expect(fakeOut.localStorage.getItem('theme')).toBe('dark');
+    expect(mockOut.localStorage.getItem('theme')).toBe('dark');
   });
 });
 ```
@@ -161,7 +161,7 @@ import 'package:mobile_client/features/draft/draft_repo.dart';
 
 void main() {
   test('固定時刻で仮想FSに下書きを保存できる', () async {
-    final out = Outside.fake(fixedTime: DateTime.utc(2026, 1, 1));
+    final out = Outside.mock(fixedTime: DateTime.utc(2026, 1, 1));
     final repo = DraftRepo(out);
 
     await repo.save('/virtual/drafts/1.txt', 'content');

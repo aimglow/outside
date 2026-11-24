@@ -1,4 +1,4 @@
-# 05. `adapters` 設計・Real/Fake 分離と実装パターン
+# 05. `adapters` 設計・Real/Mock 分離と実装パターン
 
 `libs/share/adapters/` および `apps/<app>/src/adapters/` は、フレームワーク固有 API（Cookie、Flutter プラグイン等）やプロジェクト固有の外部境界（セッション間 IPC 通信、台帳ストレージ、外部 API 等）を隔離するレイヤーです。
 
@@ -6,7 +6,7 @@
 
 ## 1. 最重要ルール：3 ファイル分離による権限隔離
 
-AI に `adapters/` の作成を許可すると、手抜きをして **`Fake` 実装の中に `Date.now()` や実機パス（`/Users/...`）をハードコードするリスク**が発生します。
+AI に `adapters/` の作成を許可すると、手抜きをして **`Mock` 実装の中に `Date.now()` や実機パス（`/Users/...`）をハードコードするリスク**が発生します。
 
 これを防ぐため、すべてのアダプタは必ず以下の **3 ファイル構造** に分割し、`real` だけに生の外部 API 利用を許可します。
 
@@ -14,15 +14,15 @@ AI に `adapters/` の作成を許可すると、手抜きをして **`Fake` 実
 libs/share/adapters/auth-cookie/
 ├── interface.ts   # 純粋な型・インターフェース定義のみ（依存ゼロ）
 ├── real.ts        # 【唯一許可】Next.js cookies() やブラウザ API を呼ぶ薄い接着剤
-└── fake.ts        # 【厳格制限】インメモリ実装。ビジネスロジックと同等のLint制限を受ける
+└── mock.ts        # 【厳格制限】インメモリ実装。ビジネスロジックと同等のLint制限を受ける
 ```
 
 Go / Dart の場合のファイル命名規則：
-- **Go:** `interface.go` / `adapter_real.go` / `adapter_fake.go`
-- **Dart:** `interface.dart` / `adapter_real.dart` / `adapter_fake.dart`
+- **Go:** `interface.go` / `adapter_real.go` / `adapter_mock.go`
+- **Dart:** `interface.dart` / `adapter_real.dart` / `adapter_mock.dart`
 
-### `Fake` 実装の鉄則
-- `Fake` 自身が時刻や ID を生成する必要がある場合は、`Fake` 内で `Date.now()` や `time.Now()` を絶対に呼ばず、**コンストラクタで `FakeOutside` を受け取るか、テストから固定値を渡す**こと。
+### `Mock` 実装の鉄則
+- `Mock` 自身が時刻や ID を生成する必要がある場合は、`Mock` 内で `Date.now()` や `time.Now()` を絶対に呼ばず、**コンストラクタで `MockOutside` を受け取るか、テストから固定値を渡す**こと。
 - 仮想ファイルパスを扱う場合は、必ず `/virtual/` をルートとした論理パス（例: `"/virtual/ipc/session.sock"`）のみを使用すること。
 
 ---
@@ -80,10 +80,10 @@ export class NextAuthCookieAdapter implements AuthCookieAdapter {
 ```
 
 ```typescript
-// libs/share/adapters/auth-cookie/fake.ts
+// libs/share/adapters/auth-cookie/mock.ts
 import type { AuthCookieAdapter, CookieOptions } from './interface';
 
-export class FakeAuthCookieAdapter implements AuthCookieAdapter {
+export class MockAuthCookieAdapter implements AuthCookieAdapter {
   public token: string | undefined = undefined;
   public lastOptions: CookieOptions | undefined = undefined;
 
@@ -128,7 +128,7 @@ type Transport interface {
 ```
 
 ```go
-// libs/share/adapters/session-ipc/adapter_fake.go
+// libs/share/adapters/session-ipc/adapter_mock.go
 package sessionipc
 
 import (
@@ -137,26 +137,26 @@ import (
 	"sync"
 )
 
-// FakeTransport は実ソケットを開かず、メモリ上のキューで決定論的にメッセージを受け渡す。
-type FakeTransport struct {
+// MockTransport は実ソケットを開かず、メモリ上のキューで決定論的にメッセージを受け渡す。
+type MockTransport struct {
 	mu     sync.Mutex
 	queues map[string][]Message
 }
 
-func NewFakeTransport() *FakeTransport {
-	return &FakeTransport{
+func NewMockTransport() *MockTransport {
+	return &MockTransport{
 		queues: make(map[string][]Message),
 	}
 }
 
-func (f *FakeTransport) Send(_ context.Context, msg Message) error {
+func (f *MockTransport) Send(_ context.Context, msg Message) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.queues[msg.ToSession] = append(f.queues[msg.ToSession], msg)
 	return nil
 }
 
-func (f *FakeTransport) Receive(_ context.Context, sessionID string) (Message, error) {
+func (f *MockTransport) Receive(_ context.Context, sessionID string) (Message, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	q := f.queues[sessionID]
@@ -186,19 +186,19 @@ export const BROWSER_OUTSIDE = new InjectionToken<BrowserOutside>('BROWSER_OUTSI
 ```typescript
 // apps/admin-console/src/app/features/auth/token.service.spec.ts
 import { TestBed } from '@angular/core/testing';
-import { createFakeBrowserOutside } from '@share/outside/angular';
+import { createMockBrowserOutside } from '@share/outside/angular';
 import { BROWSER_OUTSIDE } from '../../core/tokens';
 import { TokenService } from './token.service';
 
 describe('TokenService', () => {
   it('期限切れトークンを固定時刻で正しく判定できる', () => {
-    const fakeOut = createFakeBrowserOutside('2026-06-01T00:00:00.000Z');
-    fakeOut.localStorage.setItem('expires_at', '2026-05-31T23:59:59.000Z');
+    const mockOut = createMockBrowserOutside('2026-06-01T00:00:00.000Z');
+    mockOut.localStorage.setItem('expires_at', '2026-05-31T23:59:59.000Z');
 
     TestBed.configureTestingModule({
       providers: [
         TokenService,
-        { provide: BROWSER_OUTSIDE, useValue: fakeOut },
+        { provide: BROWSER_OUTSIDE, useValue: mockOut },
       ],
     });
 
@@ -221,8 +221,8 @@ abstract class KvStorage {
   Future<void> write(String key, String value);
 }
 
-// libs/share/adapters/kv-storage/adapter_fake.dart
-class FakeKvStorage implements KvStorage {
+// libs/share/adapters/kv-storage/adapter_mock.dart
+class MockKvStorage implements KvStorage {
   final Map<String, String> _data = {};
 
   @override

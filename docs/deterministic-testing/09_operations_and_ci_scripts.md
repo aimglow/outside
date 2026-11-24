@@ -9,7 +9,7 @@
 ```text
 # 隣接配置された outside リポジトリ
 ../outside/
-├── AGENTS.md                  # 08_agents_md_outside_gatekeeper.md を配置
+├── CLAUDE.md                  # 08_agents_md_outside_gatekeeper.md を配置
 ├── scripts/
 │   └── release.sh             # 全言語テスト＆自動タグ発行スクリプト
 ├── go/                        # Go 実装・テスト
@@ -19,7 +19,7 @@
 
 # 本体 Nx ワークスペース
 ./workspace/
-├── AGENTS.md                  # 07_agents_md_app_template.md を配置
+├── CLAUDE.md                  # 07_agents_md_app_template.md を配置
 ├── scripts/
 │   └── sync-outside.sh        # git archive によるクリーン同期スクリプト
 └── libs/share/outside/
@@ -33,11 +33,15 @@
 
 ## 2. `outside` リポジトリ用：`scripts/release.sh`（マイクロ CI/CD）
 
-全 4 区分（`go`, `next`, `angular`, `flutter`）のテストを実行し、並行作業時のタグ衝突を自動リトライで回避しながらパッチバージョンをインクリメントして Push します。
+全 4 区分（`go`, `next`, `angular`, `flutter`）のテストを実行し、並行作業時のタグ衝突を自動リトライで回避しながら、引数で受けた上げ方（`major` / `minor` / `patch`）で版を上げて Push します。上げ方は版の意味に従う: 口や method を足す = `minor`、意味を変える・消す = `major`、振る舞いを変えない直し = `patch`（0.x の間は意味を変える変更も `minor`）。
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
+
+# Usage: ./scripts/release.sh <major|minor|patch>
+BUMP="${1:-}"
+case "$BUMP" in major|minor|patch) ;; *) echo "Usage: $0 <major|minor|patch>" >&2; exit 1;; esac
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -49,7 +53,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 
-# 2. 全ランタイムのテスト実行（Real & Fake 両面検証）
+# 2. 全ランタイムのテスト実行（Real & Mock 両面検証）
 echo "==> Running tests across all runtime targets..."
 
 if [[ -d "go" ]]; then
@@ -86,7 +90,11 @@ for ((i=1; i<=MAX_RETRIES; i++)); do
   else
     VERSION="${LATEST_TAG#v}"
     IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-    NEW_TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+    case "$BUMP" in
+      major) NEW_TAG="v$((MAJOR + 1)).0.0" ;;
+      minor) NEW_TAG="v${MAJOR}.$((MINOR + 1)).0" ;;
+      patch) NEW_TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+    esac
   fi
 
   echo "==> Creating and pushing tag: ${NEW_TAG} (attempt ${i}/${MAX_RETRIES})"
@@ -182,6 +190,6 @@ fi
 1. **本体セッション（開発中）:**
    OS プリミティブの不足を検知 → 業務背景を削ぎ落とした仕様書を作成し、`outside` 専用セッションへ `relay`。
 2. **`outside` 専用セッション（門番）:**
-   `08_agents_md_outside_gatekeeper.md` に照らし合わせて審査 → `Real` + `Fake` + 両面テストを実装 → `./scripts/release.sh` を実行 → 発行されたタグ名（例: `v0.2.0`）を返却。
+   `08_agents_md_outside_gatekeeper.md` に照らし合わせて審査 → `Real` + `Mock` + 両面テストを実装 → `./scripts/release.sh` を実行 → 発行されたタグ名（例: `v0.2.0`）を返却。
 3. **本体セッション（再開）:**
    `./scripts/sync-outside.sh all v0.2.0` を実行 → Nx キャッシュが更新されたクリーンな状態で実装・Unit テストを再開 → `npx nx affected -t lint,test` で完了検証。

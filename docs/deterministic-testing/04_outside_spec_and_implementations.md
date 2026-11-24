@@ -1,14 +1,14 @@
 # 04. `libs/share/outside/{go,angular,next,flutter}` 標準仕様と実装リファレンス
 
-本章では、Nx ワークスペースの `libs/share/outside/` 配下に配置する 4 つのランタイム基盤の標準インターフェースと、`Real`（本番用）・`Fake`（テスト用）の完全な実装リファレンスを定義します。
+本章では、Nx ワークスペースの `libs/share/outside/` 配下に配置する 4 つのランタイム基盤の標準インターフェースと、`Real`（本番用）・`Mock`（テスト用）の完全な実装リファレンスを定義します。
 
 ---
 
 ## 1. 全ランタイム共通の設計原則
 
-1. **ペア提供の原則:** すべてのプリミティブは `Real` 実装と `Fake` 実装のセットで提供する。
-2. **ゼロ汚染の原則:** `Fake` を生成（`NewFake` / `createFakeOutside` / `Outside.fake`）するたびに完全に独立したインメモリ状態が作られ、テスト間の状態汚染が起きないこと。
-3. **検証ヘルパーの同梱:** `Fake` 側には、テストのアサーションを簡潔にするためのヘルパー（仮想環境変数のセット、コマンド実行履歴 `execHistory`、仮想時計の進行 `Advance` など）を標準装備する。
+1. **ペア提供の原則:** すべてのプリミティブは `Real` 実装と `Mock` 実装のセットで提供する。
+2. **ゼロ汚染の原則:** `Mock` を生成（`NewMock` / `createMockOutside` / `Outside.mock`）するたびに完全に独立したインメモリ状態が作られ、テスト間の状態汚染が起きないこと。
+3. **検証ヘルパーの同梱:** `Mock` 側には、テストのアサーションを簡潔にするためのヘルパー（仮想環境変数のセット、コマンド実行履歴 `execHistory`、仮想時計の進行 `Advance` など）を標準装備する。
 
 ---
 
@@ -21,6 +21,7 @@ AI開発基盤（Session Relay・台帳・監視 Daemon）を完全に決定論�
 package outside
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -40,6 +41,8 @@ type Clock interface {
 // CmdRunner は外部プロセス実行を抽象化する。
 type CmdRunner interface {
 	Run(name string, args ...string) ([]byte, error)
+	// RunWithStdin は stdin を子プロセスの標準入力に渡す（秘密を argv にもファイルにも載せない）。
+	RunWithStdin(stdin []byte, name string, args ...string) ([]byte, error)
 }
 
 // SysInfo は実行マシン・プロセス固有情報を抽象化する。
@@ -63,19 +66,19 @@ type Env struct {
 	Sys     SysInfo
 	Id      IdGen
 	Getenv  func(key string) string
-	// Fake 検証用フィールド（Real では nil）
-	Fake *FakeControls
+	// Mock 検証用フィールド（Real では nil）
+	Mock *MockControls
 }
 
-// FakeControls はテスト時のみ使用する操作・検証用ハンドル。
-type FakeControls struct {
-	Clock       *FakeClock
-	Cmd         *FakeCmdRunner
+// MockControls はテスト時のみ使用する操作・検証用ハンドル。
+type MockControls struct {
+	Clock       *MockClock
+	Cmd         *MockCmdRunner
 	EnvVars     map[string]string
 	mu          sync.Mutex
 }
 
-func (f *FakeControls) SetEnv(key, val string) {
+func (f *MockControls) SetEnv(key, val string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.EnvVars[key] = val
@@ -90,6 +93,11 @@ func (realClock) Sleep(d time.Duration) { time.Sleep(d) }
 type realCmdRunner struct{}
 func (realCmdRunner) Run(name string, args ...string) ([]byte, error) {
 	return exec.Command(name, args...).CombinedOutput()
+}
+func (realCmdRunner) RunWithStdin(stdin []byte, name string, args ...string) ([]byte, error) {
+	c := exec.Command(name, args...)
+	c.Stdin = bytes.NewReader(stdin)
+	return c.CombinedOutput()
 }
 
 type realSysInfo struct{}
@@ -115,65 +123,73 @@ func NewReal() *Env {
 	}
 }
 
-// --- Fake 実装 ---
+// --- Mock 実装 ---
 
-type FakeClock struct {
+type MockClock struct {
 	mu      sync.Mutex
 	current time.Time
 }
 
-func (c *FakeClock) Now() time.Time {
+func (c *MockClock) Now() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.current
 }
 
-func (c *FakeClock) Sleep(d time.Duration) {
+func (c *MockClock) Sleep(d time.Duration) {
 	c.Advance(d)
 }
 
-func (c *FakeClock) Advance(d time.Duration) {
+func (c *MockClock) Advance(d time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.current = c.current.Add(d)
 }
 
 type RecordedCmd struct {
-	Name string
-	Args []string
+	Name  string
+	Args  []string
+	Stdin []byte
 }
 
-type FakeCmdRunner struct {
+type MockCmdRunner struct {
 	mu      sync.Mutex
 	History []RecordedCmd
 	StubOut []byte
 	StubErr error
 }
 
-func (c *FakeCmdRunner) Run(name string, args ...string) ([]byte, error) {
+func (c *MockCmdRunner) Run(name string, args ...string) ([]byte, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.History = append(c.History, RecordedCmd{Name: name, Args: args})
 	return c.StubOut, c.StubErr
 }
 
-type fakeSysInfo struct{}
-func (fakeSysInfo) Hostname() string { return "test-host" }
-func (fakeSysInfo) HomeDir() string  { return "/virtual/home" }
-func (fakeSysInfo) Pid() int         { return 1000 }
-func (fakeSysInfo) IsTTY() bool      { return false }
+func (c *MockCmdRunner) RunWithStdin(stdin []byte, name string, args ...string) ([]byte, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.History = append(c.History, RecordedCmd{Name: name, Args: args, Stdin: append([]byte(nil), stdin...)})
+	return c.StubOut, c.StubErr
+}
 
-type fakeIdGen struct{ seq atomic.Uint64 }
-func (g *fakeIdGen) NewID() string {
+type mockSysInfo struct{}
+func (mockSysInfo) Hostname() string { return "test-host" }
+func (mockSysInfo) HomeDir() string  { return "/virtual/home" }
+func (mockSysInfo) Pid() int         { return 1000 }
+func (mockSysInfo) IsTTY() bool      { return false }
+
+type mockIdGen struct{ seq atomic.Uint64 }
+func (g *mockIdGen) NewID() string {
 	return fmt.Sprintf("id-%04d", g.seq.Add(1))
 }
 
-// NewFake はテスト用の 100% 決定論的なインメモリ環境を生成する。
-func NewFake(fixedTime time.Time) *Env {
-	fc := &FakeClock{current: fixedTime.UTC()}
-	fcmd := &FakeCmdRunner{}
+// NewMock はテスト用の 100% 決定論的なインメモリ環境を生成する。
+func NewMock(fixedTime time.Time) *Env {
+	fc := &MockClock{current: fixedTime.UTC()}
+	fcmd := &MockCmdRunner{}
 	envVars := make(map[string]string)
-	controls := &FakeControls{
+	controls := &MockControls{
 		Clock:   fc,
 		Cmd:     fcmd,
 		EnvVars: envVars,
@@ -182,14 +198,14 @@ func NewFake(fixedTime time.Time) *Env {
 		Fs:    afero.NewMemMapFs(),
 		Clock: fc,
 		Cmd:   fcmd,
-		Sys:   fakeSysInfo{},
-		Id:    &fakeIdGen{},
+		Sys:   mockSysInfo{},
+		Id:    &mockIdGen{},
 		Getenv: func(key string) string {
 			controls.mu.Lock()
 			defer controls.mu.Unlock()
 			return envVars[key]
 		},
-		Fake: controls,
+		Mock: controls,
 	}
 }
 ```
@@ -218,7 +234,7 @@ export interface Outside {
   newId: () => string;
 }
 
-export interface FakeOutside extends Outside {
+export interface MockOutside extends Outside {
   setEnv: (key: string, value: string) => void;
   advanceTimeMs: (ms: number) => void;
   stubExec: (stdout: string) => void;
@@ -238,7 +254,7 @@ export function createRealOutside(): Outside {
   };
 }
 
-export function createFakeOutside(fixedIso = '2026-01-01T00:00:00.000Z'): FakeOutside {
+export function createMockOutside(fixedIso = '2026-01-01T00:00:00.000Z'): MockOutside {
   const vol = new Volume();
   let currentMs = Date.parse(fixedIso);
   const envMap = new Map<string, string>();
@@ -295,7 +311,7 @@ export interface BrowserOutside {
   origin: () => string;
 }
 
-export interface FakeBrowserOutside extends BrowserOutside {
+export interface MockBrowserOutside extends BrowserOutside {
   advanceTimeMs: (ms: number) => void;
   setOrigin: (origin: string) => void;
 }
@@ -320,9 +336,9 @@ export function createRealBrowserOutside(): BrowserOutside {
   };
 }
 
-export function createFakeBrowserOutside(
+export function createMockBrowserOutside(
   fixedIso = '2026-01-01T00:00:00.000Z',
-): FakeBrowserOutside {
+): MockBrowserOutside {
   let currentMs = Date.parse(fixedIso);
   let idSeq = 0;
   let currentOrigin = 'https://app.example.test';
@@ -371,7 +387,7 @@ class RealProcessRunner implements ProcessRunner {
   }
 }
 
-class FakeProcessRunner implements ProcessRunner {
+class MockProcessRunner implements ProcessRunner {
   String stubStdout = '';
   final List<String> history = [];
 
@@ -389,9 +405,9 @@ class Outside {
   final String? Function(String key) env;
   final String Function() newId;
 
-  // Fake 操作用ハンドル（Real では null）
-  final FakeProcessRunner? fakeProcess;
-  final Map<String, String>? fakeEnvMap;
+  // Mock 操作用ハンドル（Real では null）
+  final MockProcessRunner? mockProcess;
+  final Map<String, String>? mockEnvMap;
 
   Outside({
     required this.fs,
@@ -399,8 +415,8 @@ class Outside {
     required this.process,
     required this.env,
     required this.newId,
-    this.fakeProcess,
-    this.fakeEnvMap,
+    this.mockProcess,
+    this.mockEnvMap,
   });
 
   factory Outside.real() {
@@ -417,23 +433,23 @@ class Outside {
     );
   }
 
-  factory Outside.fake({DateTime? fixedTime}) {
+  factory Outside.mock({DateTime? fixedTime}) {
     final baseTime = (fixedTime ?? DateTime.utc(2026, 1, 1)).toUtc();
-    final fakeProc = FakeProcessRunner();
+    final mockProc = MockProcessRunner();
     final envMap = <String, String>{};
     var seq = 0;
 
     return Outside(
       fs: MemoryFileSystem(),
       clock: Clock.fixed(baseTime),
-      process: fakeProc,
+      process: mockProc,
       env: (key) => envMap[key],
       newId: () {
         seq += 1;
         return 'id-${seq.toString().padLeft(4, '0')}';
       },
-      fakeProcess: fakeProc,
-      fakeEnvMap: envMap,
+      mockProcess: mockProc,
+      mockEnvMap: envMap,
     );
   }
 }

@@ -12,11 +12,11 @@
 
 | 非決定要素 | 具体的な問題・キャッシュが外れる原因 | `outside` / `adapters` での解決策 |
 | :--- | :--- | :--- |
-| **PID / スレッドID**<br>(`os.Getpid()`, `process.pid`) | デーモンの多重起動防止（`daemon.pid`）や死活監視ログに実 PID を書き込むと、実行ごとにファイル内容やキャッシュキーが変化する。 | `outside` の `SysInfo.Pid()` を使用。`Fake` では固定値（例: `1000`）を返す。 |
-| **動的ポート (`:0`)・UDS ソケット** | Relay 通信で空きポートを動的割り当てしたり、実一時ディレクトリに `.sock` を作ると、アドレスが毎回変わり、macOS ではパス長制限（104バイト）で機体差エラーが起きる。 | 通信路を `adapters/session-ipc` に抽象化。Unit テストでは実ソケットを開かず、インメモリチャネル／キューの `Fake` で送受信する。 |
+| **PID / スレッドID**<br>(`os.Getpid()`, `process.pid`) | デーモンの多重起動防止（`daemon.pid`）や死活監視ログに実 PID を書き込むと、実行ごとにファイル内容やキャッシュキーが変化する。 | `outside` の `SysInfo.Pid()` を使用。`Mock` では固定値（例: `1000`）を返す。 |
+| **動的ポート (`:0`)・UDS ソケット** | Relay 通信で空きポートを動的割り当てしたり、実一時ディレクトリに `.sock` を作ると、アドレスが毎回変わり、macOS ではパス長制限（104バイト）で機体差エラーが起きる。 | 通信路を `adapters/session-ipc` に抽象化。Unit テストでは実ソケットを開かず、インメモリチャネル／キューの `Mock` で送受信する。 |
 | **OS シグナル**<br>(`SIGTERM`, `SIGINT`, `SIGHUP`) | 実プロセスを起動して `kill` を送り `sleep` で終了を待つテストは、CPU 負荷次第でタイミングが揺れ不安定（Flaky）になる。 | シグナル受信をチャネル／コールバックインターフェースとして注入し、テスト側から直接イベント発火させる。 |
-| **FS 監視イベント・ロック**<br>(`fsnotify`, `chokidar`, `flock`) | イベントの発火順序・重複・デバウンス時間・`mtime` 精度が OS（macOS APFS vs Linux ext4）によって異なる。 | ファイル監視を `adapters/fs-watcher` に隔離。`Fake` ではテスト側から「ファイル変更イベント」を同期的に手動発火させる。 |
-| **マシン固有識別子**<br>(`Hostname`, `UserHomeDir`, `MachineID`) | 機体間共有のキャッシュ台帳やセッション台帳のキーにホスト名やホームパスを含めると、実行機体が変わった瞬間にテストが不一致になる。 | `outside` の `SysInfo`（`Hostname()`, `HomeDir()`）を使用し、`Fake` では `"test-host"`, `"/virtual/home"` を返す。 |
+| **FS 監視イベント・ロック**<br>(`fsnotify`, `chokidar`, `flock`) | イベントの発火順序・重複・デバウンス時間・`mtime` 精度が OS（macOS APFS vs Linux ext4）によって異なる。 | ファイル監視を `adapters/fs-watcher` に隔離。`Mock` ではテスト側から「ファイル変更イベント」を同期的に手動発火させる。 |
+| **マシン固有識別子**<br>(`Hostname`, `UserHomeDir`, `MachineID`) | 機体間共有のキャッシュ台帳やセッション台帳のキーにホスト名やホームパスを含めると、実行機体が変わった瞬間にテストが不一致になる。 | `outside` の `SysInfo`（`Hostname()`, `HomeDir()`）を使用し、`Mock` では `"test-host"`, `"/virtual/home"` を返す。 |
 | **TTY 判定・ANSI カラー**<br>(`isatty`, `NO_COLOR`) | CLI 出力がターミナルか CI パイプかを自動判定して装飾を変えると、ローカルと CI で標準出力が一致せずキャッシュが外れる。 | ターミナル判定を `SysInfo.IsTTY()` に隔離し、テスト時は `false`（プレーン出力）に固定する。 |
 | **FS ケース感度・改行コード** | macOS（大文字小文字を区別しない）と Linux（区別する）の差、Windows の `CRLF` と `LF` の差。 | 仮想パスはすべて小文字・スラッシュ区切り（`/virtual/...`）に統一し、改行は `
 `（LF）を強制する。 |
@@ -29,7 +29,7 @@
 
 | 非決定要素 | 具体的な問題・キャッシュが外れる原因 | `outside` / `adapters` での解決策 |
 | :--- | :--- | :--- |
-| **現在時刻の取得**<br>(`time.Now`, `new Date()`, `DateTime.now`) | ログ、台帳の更新日時、キャッシュ有効期限の計算が実行時刻によって毎回変わる。 | `outside` の `Clock.Now()` を使用。`Fake` では固定時刻（例: `2026-01-01T00:00:00Z`）を返す。 |
+| **現在時刻の取得**<br>(`time.Now`, `new Date()`, `DateTime.now`) | ログ、台帳の更新日時、キャッシュ有効期限の計算が実行時刻によって毎回変わる。 | `outside` の `Clock.Now()` を使用。`Mock` では固定時刻（例: `2026-01-01T00:00:00Z`）を返す。 |
 | **Ticker / Sleep / Debounce**<br>(`time.NewTicker`, `setTimeout`) | 監視デーモンのハートビートやリトライ待機を実時間で動かすと、テストが遅くなるうえ、実行環境の負荷で発火回数がブレる。 | `outside` の `Clock` に **`Advance(duration)`（仮想時計の早送り）** を実装し、実時間を 1 ミリ秒も待たずにタイマーを発火させる。 |
 | **タイムゾーン・ロケール**<br>(`time.Local`, `Intl`) | ローカル機（JST / `ja_JP`）と CI コンテナ（UTC / `C`）で日時文字列や文字列ソート順が変わる。 | 内部処理・テストの時刻はすべて **UTC 固定** とし、表示変換が必要な場合のみ明示的にタイムゾーンを引数で渡す。 |
 | **Go `map` のイテレーション順序**<br>および並行完了順序 | Go の `map` は仕様上、反復順序が毎回ランダム化される。台帳やキャッシュキーを `map` から直接 JSON 化・ハッシュ化すると、中身が同じでも毎回ハッシュが変わりキャッシュが外れる。 | 規約およびレビュー／Lint で、**シリアライズ・ハッシュ化前のスライスは必ず `slices.Sort` で決定論的ソートを行う**ことを強制する。 |
@@ -40,7 +40,7 @@
 
 | 非決定要素 | 具体的な問題・キャッシュが外れる原因 | `outside` / `adapters` での解決策 |
 | :--- | :--- | :--- |
-| **UUID / ULID / 乱数 / Nonce**<br>(`uuid.New`, `Math.random`, `crypto/rand`) | セッション ID や台帳レコード ID をランダム生成すると、スナップショット比較やキャッシュキーが毎回不一致になる。 | `outside` の `IdGen`（`NewID()`, `RandomBytes(n)`）を使用。`Fake` では `id-0001`, `id-0002`... と決定論的連番を返す。 |
+| **UUID / ULID / 乱数 / Nonce**<br>(`uuid.New`, `Math.random`, `crypto/rand`) | セッション ID や台帳レコード ID をランダム生成すると、スナップショット比較やキャッシュキーが毎回不一致になる。 | `outside` の `IdGen`（`NewID()`, `RandomBytes(n)`）を使用。`Mock` では `id-0001`, `id-0002`... と決定論的連番を返す。 |
 | **自己署名証明書の期限** | テスト用 TLS 証明書が実時計の経過によりある日突然期限切れになり、全テストが失敗する。 | 証明書検証時刻にも `outside` の `Clock.Now()` を注入し、仮想時刻を証明書の有効期間内に固定する。 |
 
 ---
@@ -50,8 +50,8 @@
 | 非決定要素 | 具体的な問題・キャッシュが外れる原因 | `outside` / `adapters` での解決策 |
 | :--- | :--- | :--- |
 | **DB の暗黙値**<br>(`DEFAULT CURRENT_TIMESTAMP`, `SERIAL`) | SQL 側で現在時刻や連番を自動採番すると、アプリ側の時計を固定していても DB 側の値が変動する。 | タイムスタンプや ID はアプリ層で `outside`（`Clock`, `IdGen`）を用いて生成し、明示的に `INSERT` する。 |
-| **DNS 解決・`localhost` 揺れ** | 環境によって `localhost` が `127.0.0.1` と `::1` のどちらに解決されるか異なり、接続エラーやログ不一致が起きる。 | Unit テストでは実ネットワーク通信を禁止し、`HttpClient` / `Adapter` の `Fake` でレスポンスを返す。 |
-| **外部 HTTP / LLM API** | 外部 API や LLM の応答は非決定的であり、ネットワーク遅延・レート制限・課金が発生する。 | `outside` の汎用 `Http` または `adapters/llm-gateway` の `Fake` で固定応答スタブを返す。 |
+| **DNS 解決・`localhost` 揺れ** | 環境によって `localhost` が `127.0.0.1` と `::1` のどちらに解決されるか異なり、接続エラーやログ不一致が起きる。 | Unit テストでは実ネットワーク通信を禁止し、`HttpClient` / `Adapter` の `Mock` でレスポンスを返す。 |
+| **外部 HTTP / LLM API** | 外部 API や LLM の応答は非決定的であり、ネットワーク遅延・レート制限・課金が発生する。 | `outside` の汎用 `Http` または `adapters/llm-gateway` の `Mock` で固定応答スタブを返す。 |
 
 ---
 
@@ -59,6 +59,6 @@
 
 | 非決定要素 | 具体的な問題・キャッシュが外れる原因 | `outside` / `adapters` での解決策 |
 | :--- | :--- | :--- |
-| **端末・ブラウザストレージ**<br>(`localStorage`, `SharedPreferences`, `SecureStorage`) | 前のテストの保存データが残存したり、実機 Keychain へのアクセスでエラーになる。 | Angular は `outside/angular` のインメモリ `Storage`、Flutter は `adapters/kv-storage` の `Fake` を使用する。 |
+| **端末・ブラウザストレージ**<br>(`localStorage`, `SharedPreferences`, `SecureStorage`) | 前のテストの保存データが残存したり、実機 Keychain へのアクセスでエラーになる。 | Angular は `outside/angular` のインメモリ `Storage`、Flutter は `adapters/kv-storage` の `Mock` を使用する。 |
 | **Next.js サーバー境界**<br>(`cookies()`, `headers()`, `draftMode()`) | リクエストコンテキスト外で呼ぶとエラーになり、実リクエスト状態に依存する。 | Route Handler / Server Action で値を抽出し、純粋な UseCase 関数へ値または `adapters/auth-cookie` 経由で渡す。 |
 | **端末環境値・OS 権限**<br>(`UserAgent`, 画面サイズ, カメラ/通知権限) | 実行ブラウザやエミュレータ環境によって値が変わり、分岐結果が揺れる。 | `adapters/device-info` や `adapters/permission` に切り出し、テストでは固定スペック・固定権限状態を注入する。 |
