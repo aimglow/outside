@@ -7,9 +7,9 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -20,7 +20,7 @@ import (
 )
 
 // TC-OUT-CONTRACT: 口ごとの契約の test を real と mock の両方に掛ける。
-// real に掛ける時は test が自分で作った物 (t.TempDir の下・自分で起こした子 process) だけを触る。
+// real に掛ける時は test が自分で作った物 (testDir が repo の .work/ の下に作った dir・自分で起こした子 process) だけを触る。
 
 // TestMain は 引数が outside-helper の時だけ 子 process 役として振る舞う (Proc の契約の相手)。
 func TestMain(m *testing.M) {
@@ -202,7 +202,7 @@ func fsContract(t *testing.T, f outside.FS, abs string) {
 func TestContract_TC_OUT_CONTRACT_FS(t *testing.T) {
 	// abs は test が自分で作った 根の外の file。読まれず 書き換わらない事も見る。
 	newAbs := func(t *testing.T) string {
-		abs := filepath.Join(t.TempDir(), "outside.txt")
+		abs := filepath.Join(testDir(t), "outside.txt")
 		if err := os.WriteFile(abs, []byte("keep"), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -214,7 +214,7 @@ func TestContract_TC_OUT_CONTRACT_FS(t *testing.T) {
 		}
 	}
 	t.Run("real", func(t *testing.T) {
-		f, err := outside.NewFS(t.TempDir())
+		f, err := outside.NewFS(testDir(t))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -235,8 +235,8 @@ func TestContract_TC_OUT_CONTRACT_FS(t *testing.T) {
 
 // real の FS は symlink で根の外へ出る path も止める (mock に symlink は無い)。
 func TestRealFS_SymlinkEscape(t *testing.T) {
-	root := t.TempDir()
-	secret := filepath.Join(t.TempDir(), "secret.txt")
+	root := testDir(t)
+	secret := filepath.Join(testDir(t), "secret.txt")
 	if err := os.WriteFile(secret, []byte("secret"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -260,141 +260,75 @@ func TestRealFS_SymlinkEscape(t *testing.T) {
 
 // real の FS は 根が無ければ 作れない。
 func TestRealFS_MissingRoot(t *testing.T) {
-	if _, err := outside.NewFS(filepath.Join(t.TempDir(), "nope")); err == nil {
+	if _, err := outside.NewFS(filepath.Join(testDir(t), "nope")); err == nil {
 		t.Error("無い根で FS が作れた")
 	}
 }
 
-// 契約の木: c1 (a.txt, dir/b.txt) → c2 (a.txt を変え c.txt を足す)。head は c2。
-func gitContract(t *testing.T, g outside.Git, c1, c2 string) {
+// 契約: Hostname と HomeDir は 空でない値か 誤り。Pid は 正の数。IsTTY は 呼べる。
+func sysInfoContract(t *testing.T, s outside.SysInfo) {
 	t.Helper()
-	if got, err := g.Head(); err != nil || got != c2 {
-		t.Errorf("Head = %q, %v (want %q)", got, err, c2)
+	if v, err := s.Hostname(); err == nil && v == "" {
+		t.Error("Hostname が 誤り無しで 空を返した")
 	}
-	if got, err := g.ListFiles(); err != nil || !reflect.DeepEqual(got, []string{"a.txt", "c.txt", "dir/b.txt"}) {
-		t.Errorf("ListFiles = %v, %v", got, err)
+	if v, err := s.HomeDir(); err == nil && v == "" {
+		t.Error("HomeDir が 誤り無しで 空を返した")
 	}
-	if got, err := g.MergeBase(c1, c2); err != nil || got != c1 {
-		t.Errorf("MergeBase = %q, %v (want %q)", got, err, c1)
+	if pid := s.Pid(); pid <= 0 {
+		t.Errorf("Pid = %d (want 正の数)", pid)
 	}
-	if got, err := g.DiffNames(c1, c2); err != nil || !reflect.DeepEqual(got, []string{"a.txt", "c.txt"}) {
-		t.Errorf("DiffNames = %v, %v", got, err)
-	}
-	if got, err := g.IsAncestor(c1, c2); err != nil || !got {
-		t.Errorf("IsAncestor(c1, c2) = %v, %v", got, err)
-	}
-	if got, err := g.IsAncestor(c2, c1); err != nil || got {
-		t.Errorf("IsAncestor(c2, c1) = %v, %v", got, err)
-	}
-	if _, err := g.MergeBase(c1, "no-such-commit"); err == nil {
-		t.Error("知らない commit の MergeBase が通った")
-	}
-	if got, err := g.Resolve("HEAD"); err != nil || got != c2 {
-		t.Errorf("Resolve(HEAD) = %q, %v (want %q)", got, err, c2)
-	}
-	if _, err := g.Resolve("no-such-ref"); err == nil {
-		t.Error("知らない ref の Resolve が通った")
-	}
-	if got, err := g.ListAt(c1, "."); err != nil || !reflect.DeepEqual(got, []string{"a.txt", "dir"}) {
-		t.Errorf("ListAt(c1, .) = %v, %v", got, err)
-	}
-	if got, err := g.ListAt(c2, "dir"); err != nil || !reflect.DeepEqual(got, []string{"b.txt"}) {
-		t.Errorf("ListAt(c2, dir) = %v, %v", got, err)
-	}
-	if got, err := g.ListAt(c2, "no-dir"); err != nil || len(got) != 0 {
-		t.Errorf("ListAt(c2, no-dir) = %v, %v (want 空)", got, err)
-	}
-	if got, err := g.ReadAt(c1, "a.txt"); err != nil || string(got) != "1" {
-		t.Errorf("ReadAt(c1, a.txt) = %q, %v", got, err)
-	}
-	if got, err := g.ReadAt(c2, "a.txt"); err != nil || string(got) != "2" {
-		t.Errorf("ReadAt(c2, a.txt) = %q, %v", got, err)
-	}
-	if _, err := g.ReadAt(c1, "c.txt"); !errors.Is(err, fs.ErrNotExist) {
-		t.Errorf("ReadAt(c1, c.txt) = %v (want fs.ErrNotExist)", err)
-	}
-	if _, err := g.ReadAt(c1, "../x"); err == nil {
-		t.Error("根の外の ReadAt が通った")
-	}
+	_ = s.IsTTY()
 }
 
-// gitEnv は test の git に渡す環境の全部。機体の設定 (global・system) を読ませない。
-var gitEnv = []string{
-	"GIT_CONFIG_GLOBAL=" + os.DevNull,
-	"GIT_CONFIG_NOSYSTEM=1",
-	"GIT_AUTHOR_NAME=outside-test",
-	"GIT_AUTHOR_EMAIL=outside-test@example.invalid",
-	"GIT_COMMITTER_NAME=outside-test",
-	"GIT_COMMITTER_EMAIL=outside-test@example.invalid",
-	"GIT_AUTHOR_DATE=2000-01-01T00:00:00Z",
-	"GIT_COMMITTER_DATE=2000-01-01T00:00:00Z",
-}
-
-// gitDo は dir の repo で git を起こす。環境は gitEnv だけを渡す。
-func gitDo(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	cmd.Env = gitEnv
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, out)
-	}
-	return strings.TrimSpace(string(out))
-}
-
-func writeFiles(t *testing.T, dir string, files map[string]string) {
-	t.Helper()
-	f, err := outside.NewFS(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for name, content := range files {
-		if err := f.WriteFile(name, []byte(content)); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
-func TestContract_TC_OUT_CONTRACT_Git(t *testing.T) {
+func TestContract_TC_OUT_CONTRACT_SysInfo(t *testing.T) {
 	t.Run("real", func(t *testing.T) {
-		// repo は t.TempDir の中に この test が作る。
-		dir := t.TempDir()
-		gitDo(t, dir, "init", "-q")
-		writeFiles(t, dir, map[string]string{"a.txt": "1", "dir/b.txt": "1"})
-		gitDo(t, dir, "add", "-A")
-		gitDo(t, dir, "commit", "-q", "-m", "c1")
-		c1 := gitDo(t, dir, "rev-parse", "HEAD")
-		writeFiles(t, dir, map[string]string{"a.txt": "2", "c.txt": "1"})
-		gitDo(t, dir, "add", "-A")
-		gitDo(t, dir, "commit", "-q", "-m", "c2")
-		c2 := gitDo(t, dir, "rev-parse", "HEAD")
-		gitContract(t, outside.NewGit(dir, gitEnv[0], gitEnv[1]), c1, c2)
+		// 機体の値は 中身を比べない (機体ごとに違う)。契約の形だけを見る。
+		sysInfoContract(t, outside.NewSysInfo())
 	})
 	t.Run("mock", func(t *testing.T) {
-		c1, c2 := "1111111", "2222222"
-		g := outsidemock.NewGit(outsidemock.GitValues{
-			Head:       c2,
-			Files:      []string{"a.txt", "c.txt", "dir/b.txt"},
-			MergeBase:  map[outsidemock.Pair]string{{A: c1, B: c2}: c1},
-			DiffNames:  map[outsidemock.Pair][]string{{A: c1, B: c2}: {"a.txt", "c.txt"}},
-			IsAncestor: map[outsidemock.Pair]bool{{A: c1, B: c2}: true, {A: c2, B: c1}: false},
-			Refs:       map[string]string{"HEAD": c2},
-			Trees: map[string]map[string]string{
-				c1: {"a.txt": "1", "dir/b.txt": "1"},
-				c2: {"a.txt": "2", "c.txt": "1", "dir/b.txt": "1"},
-			},
-		})
-		gitContract(t, g, c1, c2)
+		s := outsidemock.NewSysInfo(outsidemock.SysInfoValues{Hostname: "host-a", HomeDir: "/home/a", Pid: 4242})
+		sysInfoContract(t, s)
+		if pid := s.Pid(); pid != 4242 {
+			t.Errorf("mock の Pid = %d (want 渡した 4242)", pid)
+		}
+		// 渡していない値は 誤り (空で黙らない) も 契約の内。
+		sysInfoContract(t, outsidemock.NewSysInfo(outsidemock.SysInfoValues{Pid: 1}))
 	})
 }
 
-// real の Git は commit の無い木で head を引けない。
-func TestRealGit_NoHeadWithoutCommit(t *testing.T) {
-	dir := t.TempDir()
-	gitDo(t, dir, "init", "-q")
-	if sha, err := outside.NewGit(dir, gitEnv[0], gitEnv[1]).Head(); err == nil {
-		t.Errorf("commit の無い木で Head が通った: %q", sha)
+// uuidV4 は UUID v4 の文字列の形。
+var uuidV4 = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+
+// 契約: 続けて呼んだ ID は 互いに違い 空でない。
+func idGenContract(t *testing.T, g outside.IdGen) []string {
+	t.Helper()
+	seen := map[string]bool{}
+	var ids []string
+	for range 100 {
+		id := g.NewID()
+		if id == "" {
+			t.Fatal("NewID が 空を返した")
+		}
+		if seen[id] {
+			t.Fatalf("NewID が 同じ ID を返した: %q", id)
+		}
+		seen[id] = true
+		ids = append(ids, id)
 	}
+	return ids
+}
+
+func TestContract_TC_OUT_CONTRACT_IdGen(t *testing.T) {
+	t.Run("real", func(t *testing.T) {
+		for _, id := range idGenContract(t, outside.NewIdGen()) {
+			if !uuidV4.MatchString(id) {
+				t.Errorf("UUID v4 の形でない: %q", id)
+			}
+		}
+	})
+	t.Run("mock", func(t *testing.T) {
+		idGenContract(t, outsidemock.NewIdGen())
+	})
 }
 
 // 契約: 宣言した helper は 起きて結果が返る。0 以外の exit は Result で返る。宣言に無い名前は 誤り。
@@ -516,7 +450,7 @@ func workdirContract(t *testing.T, w outside.Workdir, root string, exists func(s
 
 func TestContract_TC_OUT_CONTRACT_Workdir(t *testing.T) {
 	t.Run("real", func(t *testing.T) {
-		root := t.TempDir()
+		root := testDir(t)
 		w, err := outside.NewWorkdir(root)
 		if err != nil {
 			t.Fatal(err)
@@ -546,7 +480,7 @@ func TestContract_TC_OUT_CONTRACT_Workdir(t *testing.T) {
 // (置き場の下に出来る事は TestContract_TC_OUT_CONTRACT_Workdir が real と mock の両方で見る。)
 func TestWorkdir_TC_OUT_WORKDIR_DECLARED(t *testing.T) {
 	t.Run("real", func(t *testing.T) {
-		parent := t.TempDir()
+		parent := testDir(t)
 		for _, root := range []string{"", filepath.Join(parent, "nope")} {
 			if w, err := outside.NewWorkdir(root); !errors.Is(err, outside.ErrNoWorkdirRoot) {
 				t.Errorf("NewWorkdir(%q) = %v, %v", root, w, err)
@@ -573,4 +507,22 @@ func TestWorkdir_TC_OUT_WORKDIR_DECLARED(t *testing.T) {
 			t.Errorf("置き場が在らない NewWorkdir = %v", err)
 		}
 	})
+}
+
+// testDir は この repo の .work/ の下に この test の dir を作り 終わりに消す (system の一時置き場を使わない)。
+func testDir(t *testing.T) string {
+	t.Helper()
+	base, err := filepath.Abs(filepath.Join("..", ".work"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := os.MkdirTemp(base, "go-outside-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }

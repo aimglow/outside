@@ -3,6 +3,8 @@ package outside
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -11,7 +13,6 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/aimglow/outside/go/internal/rule"
@@ -130,139 +131,81 @@ func (f realFS) Remove(p string) error {
 	return r.Remove(c)
 }
 
-// gitLocalEnv は git の向き先を変える環境変数。宣言した木だけを見るため 子 process へ渡さない。
-var gitLocalEnv = map[string]bool{
-	"GIT_DIR": true, "GIT_WORK_TREE": true, "GIT_INDEX_FILE": true, "GIT_COMMON_DIR": true,
-	"GIT_OBJECT_DIRECTORY": true, "GIT_ALTERNATE_OBJECT_DIRECTORIES": true,
-	"GIT_NAMESPACE": true, "GIT_PREFIX": true,
+type realSysInfo struct{}
+
+// NewSysInfo は 動いている機体と process の値を返す口を返す。
+func NewSysInfo() SysInfo { return realSysInfo{} }
+
+func (realSysInfo) Hostname() (string, error) {
+	name, err := os.Hostname()
+	if err != nil {
+		return "", fmt.Errorf("outside: host の名前が引けない: %w", err)
+	}
+	if name == "" {
+		return "", fmt.Errorf("outside: host の名前が空")
+	}
+	return name, nil
 }
 
-type realGit struct {
-	dir string
-	env []string
+func (realSysInfo) HomeDir() (string, error) {
+	dir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("outside: home の dir が引けない: %w", err)
+	}
+	if dir == "" {
+		return "", fmt.Errorf("outside: home の dir が空")
+	}
+	return dir, nil
 }
 
-// NewGit は dir の木の git に問う口を返す。extraEnv は git の子 process に足す環境変数 (NAME=値)。
-func NewGit(dir string, extraEnv ...string) Git {
-	return realGit{dir: dir, env: extraEnv}
+func (realSysInfo) Pid() int { return os.Getpid() }
+
+func (realSysInfo) IsTTY() bool {
+	info, err := os.Stdin.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
-// run は git を起こし 標準出力と exit の番号を返す。
-func (g realGit) run(args ...string) (string, int, error) {
-	cmd := exec.Command("git", append([]string{"-C", g.dir}, args...)...)
-	for _, kv := range os.Environ() {
-		if name, _, _ := strings.Cut(kv, "="); !gitLocalEnv[name] {
-			cmd.Env = append(cmd.Env, kv)
+type realIdGen struct{}
+
+// NewIdGen は 呼ぶたびに 違う ID (UUID v4 の形、乱数は crypto/rand) を返す口を返す。
+func NewIdGen() IdGen { return realIdGen{} }
+
+func (realIdGen) NewID() string {
+	var b [16]byte
+	// crypto/rand.Read は 誤りを返さない (読めない時は process を止める) 決まり。
+	_, _ = rand.Read(b[:])
+	b[6] = b[6]&0x0f | 0x40 // 版 4
+	b[8] = b[8]&0x3f | 0x80 // variant 10
+	h := hex.EncodeToString(b[:])
+	return h[0:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:32]
+}
+
+// worktreeRoot は dir から上へ .git (dir でも file でも) を探し 最初に在った dir を返す。git の program は起こさない。
+// ceiling が空でなければ その dir より上へは探さない (ceiling 自身は探す)。見つからなければ 誤り。
+func worktreeRoot(dir, ceiling string) (string, error) {
+	d, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	if ceiling != "" {
+		if ceiling, err = filepath.Abs(ceiling); err != nil {
+			return "", err
 		}
 	}
-	cmd.Env = append(cmd.Env, g.env...)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	err := cmd.Run()
-	var ee *exec.ExitError
-	if errors.As(err, &ee) && ee.ExitCode() >= 0 {
-		return stdout.String(), ee.ExitCode(), fmt.Errorf("outside: git %s: exit %d: %s",
-			strings.Join(args, " "), ee.ExitCode(), strings.TrimSpace(stderr.String()))
-	}
-	if err != nil {
-		return "", -1, fmt.Errorf("outside: git が起こせない: %w", err)
-	}
-	return stdout.String(), 0, nil
-}
-
-// splitZ は NUL 区切りの出力を 名前の順の一覧にする。
-func splitZ(out string) []string {
-	names := []string{}
-	for _, n := range strings.Split(out, "\x00") {
-		if n != "" {
-			names = append(names, n)
+	for {
+		_, err := os.Stat(filepath.Join(d, ".git"))
+		if err == nil {
+			return d, nil
 		}
-	}
-	sort.Strings(names)
-	return names
-}
-
-func (g realGit) Head() (string, error) {
-	out, _, err := g.run("rev-parse", "--verify", "HEAD")
-	return strings.TrimSpace(out), err
-}
-
-func (g realGit) ListFiles() ([]string, error) {
-	out, _, err := g.run("ls-files", "-z")
-	if err != nil {
-		return nil, err
-	}
-	return splitZ(out), nil
-}
-
-func (g realGit) MergeBase(a, b string) (string, error) {
-	out, _, err := g.run("merge-base", a, b)
-	return strings.TrimSpace(out), err
-}
-
-func (g realGit) DiffNames(from, to string) ([]string, error) {
-	out, _, err := g.run("diff", "--name-only", "-z", from, to)
-	if err != nil {
-		return nil, err
-	}
-	return splitZ(out), nil
-}
-
-func (g realGit) IsAncestor(ancestor, descendant string) (bool, error) {
-	_, code, err := g.run("merge-base", "--is-ancestor", ancestor, descendant)
-	switch code {
-	case 0:
-		return true, nil
-	case 1:
-		return false, nil
-	default:
-		return false, err
-	}
-}
-
-func (g realGit) Resolve(ref string) (string, error) {
-	out, _, err := g.run("rev-parse", "--verify", "--end-of-options", ref+"^{commit}")
-	return strings.TrimSpace(out), err
-}
-
-func (g realGit) ListAt(rev, dir string) ([]string, error) {
-	c, err := rule.CleanRel(dir)
-	if err != nil {
-		return nil, err
-	}
-	spec := rev + ":" + c
-	if c == "." {
-		spec = rev + ":"
-	}
-	out, code, err := g.run("ls-tree", "-z", "--name-only", spec)
-	if code == 128 {
-		if _, e := g.Resolve(rev); e != nil {
-			return nil, e
+		if !errors.Is(err, fs.ErrNotExist) {
+			return "", fmt.Errorf("%s の .git が確かめられない: %w", d, err)
 		}
-		return []string{}, nil
+		parent := filepath.Dir(d)
+		if d == ceiling || parent == d {
+			return "", fmt.Errorf("%s から上に .git が無い", dir)
+		}
+		d = parent
 	}
-	if err != nil {
-		return nil, err
-	}
-	return splitZ(out), nil
-}
-
-func (g realGit) ReadAt(rev, p string) ([]byte, error) {
-	c, err := rule.CleanRel(p)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := g.Resolve(rev); err != nil {
-		return nil, err
-	}
-	if _, code, _ := g.run("cat-file", "-e", rev+":"+c); code != 0 {
-		return nil, fmt.Errorf("outside: %s:%s: %w", rev, c, fs.ErrNotExist)
-	}
-	out, _, err := g.run("cat-file", "blob", rev+":"+c)
-	if err != nil {
-		return nil, err
-	}
-	return []byte(out), nil
 }
 
 type realProc struct{ programs map[string]string }
@@ -367,7 +310,8 @@ func (w *realWorkdir) Cleanup() error {
 
 // RunTool は ツールの入口。declPath の宣言 (outside.toml) を読み 環境を確かめ、
 // 合えば real の Set で fn を呼ぶ。合わなければ fn を呼ばず 足りない物を名乗る誤りを返す。
-// 宣言の相対 path の基準は requires_git_worktree がtrue なら git の木の根、false なら 宣言の file の dir。
+// 宣言の相対 path の基準は requires_git_worktree が true なら git の木の根 (宣言の dir から上へ .git を探す。git の program は起こさない)、
+// false なら 宣言の file の dir。
 func RunTool(declPath string, fn func(Set) error) error {
 	data, err := os.ReadFile(declPath)
 	if err != nil {
@@ -381,12 +325,14 @@ func RunTool(declPath string, fn func(Set) error) error {
 	if err != nil {
 		return fmt.Errorf("%w: 宣言の置き場が決まらない: %v", ErrUndetermined, err)
 	}
+	var worktree func() (string, error)
 	if decl.RequiresGitWorktree {
-		out, _, err := realGit{dir: root}.run("rev-parse", "--show-toplevel")
+		top, err := worktreeRoot(root, "")
 		if err != nil {
 			return &MismatchError{Missing: []string{fmt.Sprintf("git の木 (%v)", err)}}
 		}
-		root = strings.TrimSpace(out)
+		root = top
+		worktree = func() (string, error) { return top, nil }
 	}
 	fsys, err := NewFS(root)
 	if err != nil {
@@ -397,11 +343,13 @@ func RunTool(declPath string, fn func(Set) error) error {
 		programs[name] = ""
 	}
 	base := Base{
-		Clock: NewClock(),
-		Env:   NewEnv(),
-		FS:    fsys,
-		Git:   NewGit(root),
-		Proc:  NewProc(programs),
+		Clock:    NewClock(),
+		Env:      NewEnv(),
+		FS:       fsys,
+		Proc:     NewProc(programs),
+		SysInfo:  NewSysInfo(),
+		IdGen:    NewIdGen(),
+		Worktree: worktree,
 		Workdir: func(r string) (Workdir, error) {
 			if !filepath.IsAbs(r) {
 				r = filepath.Join(root, r)

@@ -78,8 +78,12 @@ type Base struct {
 	Env   Env
 	// FS は 宣言の相対 path の基準 (repo の根) を根とする。
 	FS   FS
-	Git  Git
 	Proc Proc
+	// SysInfo と IdGen は そのまま Set へ渡る (宣言で絞らない)。
+	SysInfo SysInfo
+	IdGen   IdGen
+	// Worktree は requires_git_worktree の時に git の木の根を返す。nil か 誤りなら git の木が足りないと名乗る。
+	Worktree func() (root string, err error)
 	// Workdir は 置き場を受けて 作業場の口を返す。置き場が無ければ 誤り。
 	Workdir func(root string) (Workdir, error)
 	// EnsureWorkdir は repo の中の相対 path の置き場を 無ければ作って 作業場の口を返す。
@@ -101,8 +105,10 @@ func RunToolWith(decl Decl, base Base, fn func(Set) error) (err error) {
 	var missing []string
 
 	if decl.RequiresGitWorktree {
-		if _, e := base.Git.Head(); e != nil {
-			missing = append(missing, fmt.Sprintf("git の木 (head が引けない: %v)", e))
+		if base.Worktree == nil {
+			missing = append(missing, "git の木 (確かめる口が無い)")
+		} else if _, e := base.Worktree(); e != nil {
+			missing = append(missing, fmt.Sprintf("git の木 (%v)", e))
 		}
 	}
 
@@ -158,9 +164,10 @@ func RunToolWith(decl Decl, base Base, fn func(Set) error) (err error) {
 		Clock:   base.Clock,
 		Env:     limitEnv{inner: base.Env, names: toSet(decl.Env)},
 		FS:      limitFS{inner: base.FS, roots: roots},
-		Git:     base.Git,
 		Proc:    limitProc{inner: base.Proc, names: toSet(names)},
 		Workdir: wd,
+		SysInfo: base.SysInfo,
+		IdGen:   base.IdGen,
 	}
 	defer func() {
 		if e := wd.Cleanup(); e != nil && err == nil {

@@ -60,23 +60,22 @@ type FS interface {
 	Remove(path string) error
 }
 
-// Git は 宣言した木の git の問いに答える。
-type Git interface {
-	// Head は head の commit の sha を返す。
-	Head() (string, error)
-	// ListFiles は 追跡下の file を 名前の順で返す。
-	ListFiles() ([]string, error)
-	MergeBase(a, b string) (string, error)
-	// DiffNames は from と to の間で変わった file を 名前の順で返す。
-	DiffNames(from, to string) ([]string, error)
-	// IsAncestor は ancestor が descendant の祖先かを返す。
-	IsAncestor(ancestor, descendant string) (bool, error)
-	// Resolve は ref (branch・tag・sha・HEAD) を commit の sha に引く。
-	Resolve(ref string) (string, error)
-	// ListAt は rev の木の dir の直下の file の名を 名前の順で返す。dir が無ければ 空。
-	ListAt(rev, dir string) ([]string, error)
-	// ReadAt は rev の木の path の file の中身を返す。無い path は fs.ErrNotExist。
-	ReadAt(rev, path string) ([]byte, error)
+// SysInfo は 動いている機体と process の値を返す。
+type SysInfo interface {
+	// Hostname は host の名前を返す。引けなければ 誤り (空の文字で黙らない)。
+	Hostname() (string, error)
+	// HomeDir は 動かしている user の home の dir を返す。引けなければ 誤り。
+	HomeDir() (string, error)
+	// Pid は この process の番号を返す。
+	Pid() int
+	// IsTTY は 標準入力が 端末 (文字 device) かを返す。
+	IsTTY() bool
+}
+
+// IdGen は 新しい ID を返す。
+type IdGen interface {
+	// NewID は 呼ぶたびに 違う ID を返す。
+	NewID() string
 }
 
 // Cmd は 起こす program と その引数。
@@ -121,7 +120,8 @@ type Set struct {
 	Clock   Clock
 	Env     Env
 	FS      FS
-	Git     Git
 	Proc    Proc
 	Workdir Workdir
+	SysInfo SysInfo
+	IdGen   IdGen
 }

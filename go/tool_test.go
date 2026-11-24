@@ -18,7 +18,7 @@ import (
 type mockWorld struct {
 	env      *outsidemock.Env
 	fs       *outsidemock.FS
-	git      *outsidemock.Git
+	worktree string // 空なら git の木の外
 	proc     *outsidemock.Proc
 	workdirs []*outsidemock.Workdir
 }
@@ -30,16 +30,16 @@ var worldTree = outsidemock.Tree{
 	"work/":        "",
 }
 
-func newWorld(t *testing.T, head string) *mockWorld {
+func newWorld(t *testing.T, worktree string) *mockWorld {
 	t.Helper()
 	fsys, err := outsidemock.NewFS(worldTree)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return &mockWorld{
-		env: outsidemock.NewEnv(map[string]string{"ALLOWED": "yes", "OTHER": "hidden", "WORK_ROOT": "work", "DATA_ROOT": ".", "MISSING_ROOT": "nowork"}),
-		fs:  fsys,
-		git: outsidemock.NewGit(outsidemock.GitValues{Head: head}),
+		env:      outsidemock.NewEnv(map[string]string{"ALLOWED": "yes", "OTHER": "hidden", "WORK_ROOT": "work", "DATA_ROOT": ".", "MISSING_ROOT": "nowork"}),
+		fs:       fsys,
+		worktree: worktree,
 		proc: outsidemock.NewProc(map[string]func(outside.Cmd) outside.Result{
 			"toolx": outsidemock.Fixed(outside.Result{Stdout: []byte("toolx version 2.9.1\n")}),
 			"other": nil,
@@ -49,11 +49,18 @@ func newWorld(t *testing.T, head string) *mockWorld {
 
 func (w *mockWorld) base() outside.Base {
 	return outside.Base{
-		Clock: outsidemock.NewClock(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
-		Env:   w.env,
-		FS:    w.fs,
-		Git:   w.git,
-		Proc:  w.proc,
+		Clock:   outsidemock.NewClock(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)),
+		Env:     w.env,
+		FS:      w.fs,
+		Proc:    w.proc,
+		SysInfo: outsidemock.NewSysInfo(outsidemock.SysInfoValues{Hostname: "host-a", Pid: 7}),
+		IdGen:   outsidemock.NewIdGen(),
+		Worktree: func() (string, error) {
+			if w.worktree == "" {
+				return "", errors.New("mock の世界: .git が無い")
+			}
+			return w.worktree, nil
+		},
 		Workdir: func(root string) (outside.Workdir, error) {
 			wd, err := outsidemock.NewWorkdir(root, root == "work")
 			if err != nil {
@@ -76,10 +83,10 @@ func (w *mockWorld) base() outside.Base {
 // TC-OUT-RUNTOOL-MISSING: 宣言に合わない環境で 足りない物を名乗って終わり 処理を呼ばない。
 func TestRunTool_TC_OUT_RUNTOOL_MISSING(t *testing.T) {
 	cases := []struct {
-		name string
-		decl outside.Decl
-		head string
-		want []string // 誤りの文に在るべき語
+		name     string
+		decl     outside.Decl
+		worktree string
+		want     []string // 誤りの文に在るべき語
 	}{
 		{
 			name: "git の木が無く program の版が足りない",
@@ -87,51 +94,51 @@ func TestRunTool_TC_OUT_RUNTOOL_MISSING(t *testing.T) {
 			want: []string{"git の木", "toolx", "3"},
 		},
 		{
-			name: "program が在らない",
-			decl: outside.Decl{Programs: map[string]string{"tooly": ""}},
-			head: "abc",
-			want: []string{"tooly"},
+			name:     "program が在らない",
+			decl:     outside.Decl{Programs: map[string]string{"tooly": ""}},
+			worktree: "repo",
+			want:     []string{"tooly"},
 		},
 		{
-			name: "版の桁が違う (2.9 は 2.90 ではない)",
-			decl: outside.Decl{Programs: map[string]string{"toolx": "2.90"}},
-			head: "abc",
-			want: []string{"toolx", "2.90"},
+			name:     "版の桁が違う (2.9 は 2.90 ではない)",
+			decl:     outside.Decl{Programs: map[string]string{"toolx": "2.90"}},
+			worktree: "repo",
+			want:     []string{"toolx", "2.90"},
 		},
 		{
-			name: "環境変数が指す 作業場の置き場が無い",
-			decl: outside.Decl{WorkdirRoot: "$MISSING_ROOT"},
-			head: "abc",
-			want: []string{"nowork"},
+			name:     "環境変数が指す 作業場の置き場が無い",
+			decl:     outside.Decl{WorkdirRoot: "$MISSING_ROOT"},
+			worktree: "repo",
+			want:     []string{"nowork"},
 		},
 		{
-			name: "置き場を指す環境変数が無い",
-			decl: outside.Decl{WorkdirRoot: "$NO_SUCH_ROOT"},
-			head: "abc",
-			want: []string{"NO_SUCH_ROOT"},
+			name:     "置き場を指す環境変数が無い",
+			decl:     outside.Decl{WorkdirRoot: "$NO_SUCH_ROOT"},
+			worktree: "repo",
+			want:     []string{"NO_SUCH_ROOT"},
 		},
 		{
-			name: "環境変数の下の外へ出る置き場",
-			decl: outside.Decl{WorkdirRoot: "$WORK_ROOT/../x"},
-			head: "abc",
-			want: []string{"WORK_ROOT/../x"},
+			name:     "環境変数の下の外へ出る置き場",
+			decl:     outside.Decl{WorkdirRoot: "$WORK_ROOT/../x"},
+			worktree: "repo",
+			want:     []string{"WORK_ROOT/../x"},
 		},
 		{
-			name: "fs_roots の dir が無い",
-			decl: outside.Decl{FSRoots: []string{"nodata"}},
-			head: "abc",
-			want: []string{"nodata"},
+			name:     "fs_roots の dir が無い",
+			decl:     outside.Decl{FSRoots: []string{"nodata"}},
+			worktree: "repo",
+			want:     []string{"nodata"},
 		},
 		{
-			name: "fs_roots が根の外",
-			decl: outside.Decl{FSRoots: []string{"../up"}},
-			head: "abc",
-			want: []string{"../up"},
+			name:     "fs_roots が根の外",
+			decl:     outside.Decl{FSRoots: []string{"../up"}},
+			worktree: "repo",
+			want:     []string{"../up"},
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			w := newWorld(t, tc.head)
+			w := newWorld(t, tc.worktree)
 			called := 0
 			err := outside.RunToolWith(tc.decl, w.base(), func(outside.Set) error {
 				called++
@@ -160,7 +167,7 @@ func TestRunTool_TC_OUT_RUNTOOL_MISSING(t *testing.T) {
 func TestRunTool_TC_OUT_RUNTOOL_OK(t *testing.T) {
 	for _, workdirRoot := range []string{"work", "$WORK_ROOT", "$DATA_ROOT/work"} {
 		t.Run(workdirRoot, func(t *testing.T) {
-			w := newWorld(t, "abc")
+			w := newWorld(t, "repo")
 			decl := outside.Decl{
 				RequiresGitWorktree: true,
 				Programs:            map[string]string{"toolx": "2.9"},
@@ -199,9 +206,12 @@ func TestRunTool_TC_OUT_RUNTOOL_OK(t *testing.T) {
 				if _, err := s.Proc.Run(ctx, outside.Cmd{Name: "other"}); !errors.Is(err, outside.ErrUndeclaredProgram) {
 					t.Errorf("宣言に無い program が起きた: %v", err)
 				}
-				// Git と Workdir。
-				if sha, err := s.Git.Head(); err != nil || sha != "abc" {
-					t.Errorf("Head = %q, %v", sha, err)
+				// SysInfo・IdGen は base の物がそのまま渡る。Workdir。
+				if h, err := s.SysInfo.Hostname(); err != nil || h != "host-a" {
+					t.Errorf("Hostname = %q, %v", h, err)
+				}
+				if id := s.IdGen.NewID(); id != "id-0001" {
+					t.Errorf("NewID = %q", id)
 				}
 				if p, err := s.Workdir.New("job"); err != nil || p != "work/job" {
 					t.Errorf("Workdir.New = %q, %v", p, err)
@@ -236,7 +246,7 @@ func TestRunTool_TC_OUT_RUNTOOL_OK(t *testing.T) {
 
 // 置き場を宣言しない時 作業場は作れない。処理の誤りは ツールの否 (判定不能とは別の番号)。
 func TestRunTool_NoWorkdirAndToolFailure(t *testing.T) {
-	w := newWorld(t, "abc")
+	w := newWorld(t, "repo")
 	failed := errors.New("ツールの否")
 	err := outside.RunToolWith(outside.Decl{}, w.base(), func(s outside.Set) error {
 		if _, err := s.Workdir.New("job"); !errors.Is(err, outside.ErrNoWorkdirRoot) {
@@ -254,7 +264,7 @@ func TestRunTool_NoWorkdirAndToolFailure(t *testing.T) {
 
 // TC-OUT-SECRET-NOCOPY: secret を読む口 (Env) は 値を返すだけで FS と Workdir に 書き込みを残さない。
 func TestSecret_TC_OUT_SECRET_NOCOPY(t *testing.T) {
-	w := newWorld(t, "abc")
+	w := newWorld(t, "repo")
 	w.env = outsidemock.NewEnv(map[string]string{"API_TOKEN": "s3cret"})
 	decl := outside.Decl{WorkdirRoot: "work", Env: []string{"API_TOKEN"}, FSRoots: []string{"data"}}
 	err := outside.RunToolWith(decl, w.base(), func(s outside.Set) error {
@@ -283,7 +293,7 @@ env = ["ALLOWED"]
 fs_roots = ["data", "docs"]
 
 [programs]
-git = "2"
+toolz = "2"
 toolx = ""
 `
 
@@ -295,7 +305,7 @@ func TestParseDecl(t *testing.T) {
 	}
 	want := outside.Decl{
 		RequiresGitWorktree: true,
-		Programs:            map[string]string{"git": "2", "toolx": ""},
+		Programs:            map[string]string{"toolz": "2", "toolx": ""},
 		WorkdirRoot:         "work",
 		Env:                 []string{"ALLOWED"},
 		FSRoots:             []string{"data", "docs"},
@@ -310,10 +320,10 @@ func TestParseDecl(t *testing.T) {
 	}
 }
 
-// writeTool は t.TempDir の下に ツールの dir (outside.toml・data・work) を作る。
+// writeTool は testDir の下に ツールの dir (outside.toml・data・work) を作る。
 func writeTool(t *testing.T, decl string) (dir, declPath string) {
 	t.Helper()
-	dir = t.TempDir()
+	dir = testDir(t)
 	for _, d := range []string{"data", "work"} {
 		if err := os.Mkdir(filepath.Join(dir, d), 0o755); err != nil {
 			t.Fatal(err)
@@ -369,7 +379,7 @@ func TestRunToolReal_Undetermined(t *testing.T) {
 	missingDir, missingRoot := writeTool(t, "fs_roots = [\"nodata\"]\nworkdir_root = \"$OUTSIDE_TEST_WORK_ROOT\"\n")
 	t.Setenv("OUTSIDE_TEST_WORK_ROOT", filepath.Join(missingDir, "nowork"))
 	_, unknownKey := writeTool(t, "no_such_field = true\n")
-	noFile := filepath.Join(t.TempDir(), "outside.toml")
+	noFile := filepath.Join(testDir(t), "outside.toml")
 	for name, declPath := range map[string]string{"dir が無い": missingRoot, "知らない項目": unknownKey, "宣言が無い": noFile} {
 		t.Run(name, func(t *testing.T) {
 			called := 0
@@ -423,7 +433,7 @@ func TestRunToolReal_TC_OUT_WORKDIR_REPO_ENSURE(t *testing.T) {
 
 // TC-OUT-WORKDIR-REPO-ENSURE (mock): mock の base でも repo の中の相対 path は 在らなくても通り $NAME の置き場は 無ければ判定不能。
 func TestRunTool_TC_OUT_WORKDIR_REPO_ENSURE_Mock(t *testing.T) {
-	w := newWorld(t, "abc")
+	w := newWorld(t, "repo")
 	called := 0
 	if err := outside.RunToolWith(outside.Decl{WorkdirRoot: "newwork"}, w.base(), func(s outside.Set) error {
 		called++

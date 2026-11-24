@@ -3,9 +3,12 @@ package outsidemock_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -88,7 +91,7 @@ func TestFSMock_TC_OUT_FS_ROOT(t *testing.T) {
 	if _, err := f.ReadFile("docs/none.txt"); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("無い file = %v", err)
 	}
-	abs := filepath.Join(t.TempDir(), "a.txt")
+	abs := filepath.Join(testDir(t), "a.txt")
 	for _, p := range []string{"../docs/a.txt", "docs/../../a.txt", "..", abs} {
 		if data, err := f.ReadFile(p); !errors.Is(err, outside.ErrOutsideRoot) {
 			t.Errorf("根の外 %q が読めた: %q, %v", p, data, err)
@@ -101,7 +104,7 @@ func TestFSMock_TC_OUT_FS_ROOT(t *testing.T) {
 
 // REQ-OUT-MOCK-TREE: 絶対 path と 根の外へ出る path と 矛盾した木の宣言は 誤り。
 func TestFSMock_TreeDeclaration(t *testing.T) {
-	abs := filepath.Join(t.TempDir(), "a.txt")
+	abs := filepath.Join(testDir(t), "a.txt")
 	bad := map[string]outsidemock.Tree{
 		"絶対 path":         {abs: "x"},
 		"根の外":             {"../a.txt": "x"},
@@ -117,52 +120,82 @@ func TestFSMock_TreeDeclaration(t *testing.T) {
 	}
 }
 
-// TC-OUT-GIT-MOCK: 渡した head・一覧・差分を返す。repo を作らない (file system を触る口を持たない)。
-func TestGitMock_TC_OUT_GIT_MOCK(t *testing.T) {
-	files := []string{"a.go", "b/c.go"}
-	diff := []string{"b/c.go"}
-	g := outsidemock.NewGit(outsidemock.GitValues{
-		Head:       "h1",
-		Files:      files,
-		MergeBase:  map[outsidemock.Pair]string{{A: "main", B: "h1"}: "m0"},
-		DiffNames:  map[outsidemock.Pair][]string{{A: "m0", B: "h1"}: diff},
-		IsAncestor: map[outsidemock.Pair]bool{{A: "m0", B: "h1"}: true},
-	})
-	if got, err := g.Head(); err != nil || got != "h1" {
-		t.Errorf("Head = %q, %v", got, err)
+// TC-OUT-SYSINFO-MOCK: 渡した値だけを返す。渡していない Hostname・HomeDir は 誤り、Pid は 0、IsTTY は false。
+func TestSysInfoMock_TC_OUT_SYSINFO_MOCK(t *testing.T) {
+	s := outsidemock.NewSysInfo(outsidemock.SysInfoValues{Hostname: "host-a", HomeDir: "/home/a", Pid: 4242, IsTTY: true})
+	if got, err := s.Hostname(); err != nil || got != "host-a" {
+		t.Errorf("Hostname = %q, %v", got, err)
 	}
-	if got, err := g.ListFiles(); err != nil || !reflect.DeepEqual(got, files) {
-		t.Errorf("ListFiles = %v, %v", got, err)
+	if got, err := s.HomeDir(); err != nil || got != "/home/a" {
+		t.Errorf("HomeDir = %q, %v", got, err)
 	}
-	if got, err := g.MergeBase("main", "h1"); err != nil || got != "m0" {
-		t.Errorf("MergeBase = %q, %v", got, err)
+	if got := s.Pid(); got != 4242 {
+		t.Errorf("Pid = %d", got)
 	}
-	if got, err := g.DiffNames("m0", "h1"); err != nil || !reflect.DeepEqual(got, diff) {
-		t.Errorf("DiffNames = %v, %v", got, err)
+	if !s.IsTTY() {
+		t.Error("IsTTY = false (want true)")
 	}
-	if got, err := g.IsAncestor("m0", "h1"); err != nil || !got {
-		t.Errorf("IsAncestor = %v, %v", got, err)
-	}
-	// 宣言していない問いは 誤り (黙って空を返さない)。
-	if _, err := g.DiffNames("x", "y"); err == nil {
-		t.Error("宣言に無い差分が通った")
-	}
-	if _, err := g.IsAncestor("x", "y"); err == nil {
-		t.Error("宣言に無い祖先の問いが通った")
-	}
-	if _, err := outsidemock.NewGit(outsidemock.GitValues{}).Head(); err == nil {
-		t.Error("head の宣言が無いのに Head が通った")
-	}
-	want := []outsidemock.Call{
-		{Method: "Head"}, {Method: "ListFiles"},
-		{Method: "MergeBase", Args: []string{"main", "h1"}},
-		{Method: "DiffNames", Args: []string{"m0", "h1"}},
-		{Method: "IsAncestor", Args: []string{"m0", "h1"}},
-		{Method: "DiffNames", Args: []string{"x", "y"}},
-		{Method: "IsAncestor", Args: []string{"x", "y"}},
-	}
-	if got := g.Calls(); !reflect.DeepEqual(got, want) {
+	want := []outsidemock.Call{{Method: "Hostname"}, {Method: "HomeDir"}, {Method: "Pid"}, {Method: "IsTTY"}}
+	if got := s.Calls(); !reflect.DeepEqual(got, want) {
 		t.Errorf("記録 = %+v", got)
+	}
+
+	// 何も渡さない mock は 機体の値を返さない。
+	empty := outsidemock.NewSysInfo(outsidemock.SysInfoValues{})
+	if got, err := empty.Hostname(); err == nil {
+		t.Errorf("渡していない Hostname が通った: %q", got)
+	}
+	if got, err := empty.HomeDir(); err == nil {
+		t.Errorf("渡していない HomeDir が通った: %q", got)
+	}
+	if got := empty.Pid(); got != 0 {
+		t.Errorf("渡していない Pid = %d (want 0)", got)
+	}
+	if empty.IsTTY() {
+		t.Error("渡していない IsTTY = true (want false)")
+	}
+}
+
+// TC-OUT-IDGEN-MOCK: id-0001 から 呼んだ順に決まった ID を返す。mock ごとに 1 から始まる。並行に呼んでも安全。
+func TestIdGenMock_TC_OUT_IDGEN_MOCK(t *testing.T) {
+	first := outsidemock.NewIdGen()
+	var got []string
+	for range 3 {
+		got = append(got, first.NewID())
+	}
+	if want := []string{"id-0001", "id-0002", "id-0003"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("1 つ目の mock = %v (want %v)", got, want)
+	}
+	second := outsidemock.NewIdGen()
+	if id := second.NewID(); id != "id-0001" {
+		t.Errorf("2 つ目の mock の最初 = %q (want id-0001)", id)
+	}
+	if calls := first.Calls(); len(calls) != 3 || calls[2].Args[0] != "id-0003" {
+		t.Errorf("記録 = %+v", calls)
+	}
+
+	// 並行に呼んでも 抜けも重なりも無い。
+	const n = 200
+	g := outsidemock.NewIdGen()
+	ids := make(chan string, n)
+	var wg sync.WaitGroup
+	for range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ids <- g.NewID()
+		}()
+	}
+	wg.Wait()
+	close(ids)
+	seen := map[string]bool{}
+	for id := range ids {
+		seen[id] = true
+	}
+	for i := 1; i <= n; i++ {
+		if id := fmt.Sprintf("id-%04d", i); !seen[id] {
+			t.Errorf("並行に呼んだ ID に %s が無い (%d 個)", id, len(seen))
+		}
 	}
 }
 
@@ -198,4 +231,22 @@ func TestProcMock_TC_OUT_PROC_DECLARED(t *testing.T) {
 	if got := p.Calls(); !reflect.DeepEqual(got, want) {
 		t.Errorf("記録 = %+v", got)
 	}
+}
+
+// testDir は この repo の .work/ の下に この test の dir を作り 終わりに消す (system の一時置き場を使わない)。
+func testDir(t *testing.T) string {
+	t.Helper()
+	base, err := filepath.Abs(filepath.Join("..", "..", ".work"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := os.MkdirTemp(base, "go-outsidemock-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }
