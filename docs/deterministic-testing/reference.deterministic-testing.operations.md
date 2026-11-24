@@ -40,7 +40,7 @@ outside repo (github.com/aimglow/outside、編集するのは outside 門番だ�
 |---|---|---|
 | 出ている版 | `outside` の tag | `git ls-remote --tags https://github.com/aimglow/outside.git '<部品>/v*'` |
 | 各版で何が変わったか・利用する側がやる事 | `outside` の `CHANGELOG.md` | 部品の名前で引く |
-| project が使っている版 | その project の `<置き場>/.outside-version` | `cat libs/outside/<部品>/.outside-version` |
+| project が使っている版 | その project の `<置き場>/.outside-version` の 1 行目 | `head -1 libs/outside/<部品>/.outside-version` |
 
 版を memory・CLAUDE.md・issue・agent の定義に書き写さない (直し忘れた写しが 古い版を言い続けるため)。
 
@@ -58,8 +58,9 @@ outside repo (github.com/aimglow/outside、編集するのは outside 門番だ�
 ## 4. 取り込み (各 project)
 
 1. `outside` の main の `scripts/sync-outside.sh` を 自分の `scripts/` へ写す。`CHANGELOG.md` に `scripts` の項が足されたら 写し直す。
-2. `./scripts/sync-outside.sh <部品> <tag>` を repo の根で実行する。一時の bare repo に その tag だけを取り (`git fetch --depth 1`)、`git archive` で 部品を取り出し 置き場を丸ごと置き換え `.outside-version` に tag を書く。部品の test (Go の `*_test.go`・`testdata/`、TS の `*.test.*`・`*.spec.ts`、Dart の `*_test.dart`・`test/`) は写さない (部品の test は project で回さない)。誤り (他の部品の tag・形の違う tag・無い tag) の時は 置き場を変えずに止まる。GitHub は `git archive --remote` に応じないので この形を取る。
+2. `./scripts/sync-outside.sh <部品> <tag>` を repo の根で実行する。一時の bare repo に その tag だけを取り (`git fetch --depth 1`)、`git archive` で 部品を取り出し 置き場を丸ごと置き換え `.outside-version` に tag (1 行目) と 写した中身の指紋 (2 行目 = 全体、続く行 = file ごと) を書く。部品の test (Go の `*_test.go`・`testdata/`、TS の `*.test.*`・`*.spec.ts`、Dart の `*_test.dart`・`test/`) は写さない (部品の test は project で回さない)。誤り (他の部品の tag・形の違う tag・無い tag) の時は 置き場を変えずに止まる。GitHub は `git archive --remote` に応じないので この形を取る。
 3. 置き場の写しは編集しない。部品の test は 置き場では回さない。
+   写しが tag の中身のままかは `./scripts/sync-outside.sh --check <部品>` で確かめる (網に行かない。exit 0 = 一致 / 1 = 違う file を名指す / 3 = 判定不能 = 指紋の無い写し・置き場が無い)。land の前の段に 部品ごとに 1 段として置き 合流後の木で回す (古い branch の merge で写しが書き換わるのを止める)。
 4. MAJOR は 各 project が 直す準備ができた時に その部品だけ上げる (全 project が同時に上げなくてよい)。
 
 ---

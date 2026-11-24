@@ -40,12 +40,41 @@ snapshot() { (cd "$dst" && find libs -type f | sort | xargs shasum) ; }
 (cd "$dst" && OUTSIDE_REPO="$w/src.git" "$here/sync-outside.sh" lint-platform lint-platform/v0.2.0 >/dev/null)
 [ "$(cat "$dst/libs/outside/lint-platform/a.txt")" = v2 ] && ok "中身が tag と一致" || ng "中身が tag と違う"
 [ ! -e "$dst/libs/outside/lint-platform/stray.txt" ] && ok "余分な file が消える" || ng "余分な file が残る"
-[ "$(cat "$dst/libs/outside/lint-platform/.outside-version")" = lint-platform/v0.2.0 ] && ok ".outside-version = tag" || ng ".outside-version が違う"
+[ "$(head -1 "$dst/libs/outside/lint-platform/.outside-version")" = lint-platform/v0.2.0 ] && ok ".outside-version の 1 行目 = tag" || ng ".outside-version の 1 行目が違う"
 [ ! -e "$dst/libs/outside/go" ] && ok "他の部品を触らない" || ng "他の部品を置いた"
 left=$(cd "$dst/libs/outside/lint-platform" && find . \( -name '*_test.go' -o -name '*.test.js' -o -name '*_test.dart' -o -name testdata -o -name test \) | sort | tr '\n' ' ')
 [ -z "$left" ] && ok "部品の test を写さない" || ng "部品の test が写った: $left"
 [ -f "$dst/libs/outside/lint-platform/sub/b.go" ] && ok "test でない file は写す" || ng "test でない file が消えた"
 ls -d "$dst"/.outside-sync.* >/dev/null 2>&1 && ng "一時の dir が残る" || ok "一時の dir が残らない"
+
+# TC-OUT-SYNC-CHECK: 網に行かない (取得元を退かせて回す)
+mv "$w/src.git" "$w/src.git.away"
+chk() { (cd "$dst" && OUTSIDE_REPO="$w/nowhere.git" "$here/sync-outside.sh" --check lint-platform 2>&1); }
+lp=$dst/libs/outside/lint-platform
+expect_rc() { # expect_rc <rc> <名指す語> <説明>
+  local out rc=0; out=$(chk) || rc=$?
+  if [ "$rc" = "$1" ] && { [ -z "$2" ] || printf '%s' "$out" | grep -qF -- "$2"; }; then ok "$3"; else ng "$3 (rc=$rc: $out)"; fi
+}
+grep -q '^fingerprint sha256:[0-9a-f]\{64\}$' "$lp/.outside-version" && ok "2 行目 = 全体の指紋" || ng "指紋の行が無い"
+expect_rc 0 "指紋が一致" "取り込んだ直後は一致"
+cp "$lp/a.txt" "$w/a.keep"; echo edited > "$lp/a.txt"
+expect_rc 1 "違う libs/outside/lint-platform/a.txt" "中身を変えた file を名指す"
+cp "$w/a.keep" "$lp/a.txt"; echo x > "$lp/added.txt"
+expect_rc 1 "増えた libs/outside/lint-platform/added.txt" "足した file を名指す"
+rm "$lp/added.txt"; mv "$lp/sub/b.go" "$w/b.keep"
+expect_rc 1 "消えた libs/outside/lint-platform/sub/b.go" "消した file を名指す"
+mv "$w/b.keep" "$lp/sub/b.go"
+expect_rc 0 "" "戻せば一致"
+cp "$lp/.outside-version" "$w/ver.keep"
+sed -i.bak 's/^file [0-9a-f]* a.txt$/file 0000000000000000000000000000000000000000000000000000000000000000 a.txt/' "$lp/.outside-version"; rm -f "$lp/.outside-version.bak"
+expect_rc 1 "記録が書き換わっている" "file ごとの行の書き換えを捕る"
+head -1 "$w/ver.keep" > "$lp/.outside-version"
+expect_rc 3 "指紋の行が無い" "指紋の無い写しは 判定不能"
+cp "$w/ver.keep" "$lp/.outside-version"
+if (cd "$dst" && "$here/sync-outside.sh" --check go >/dev/null 2>&1); then ng "置き場が無いのに通った"; else
+  rc=0; (cd "$dst" && "$here/sync-outside.sh" --check go >/dev/null 2>&1) || rc=$?
+  [ "$rc" = 3 ] && ok "置き場が無い は 判定不能" || ng "置き場が無い の rc=$rc"; fi
+mv "$w/src.git.away" "$w/src.git"
 
 # TC-OUT-SYNC: 誤りの時は 1 byte も変えない
 before=$(snapshot)

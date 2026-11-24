@@ -174,6 +174,18 @@ cases:
     mocks: 取得元は test が作った bare repo (網を使わない)
     expect: place の中身が tag の中身 (部品の test を除く) と一致し 余分な file が消え .outside-version が tag。部品の test (*_test.go・testdata/・*.test.js・*_test.dart・test/) は写らず test でない file は写る。誤りの時は 取り込み先が 1 byte も変わらない。
 
+  - id: TC-OUT-SYNC-CHECK
+    requirement: REQ-OUT-VENDOR-INTACT
+    behavior: >
+      sync-outside.sh は .outside-version に 1 行目 tag・2 行目 全体の指紋・file ごとの指紋を書く。--check <部品> は 網に行かず 置き場を数え直して照らす。
+    input: >
+      取り込んだ直後の置き場 / 1 file の中身を変えた置き場 / file を足した置き場 / file を消した置き場 /
+      file ごとの行を書き換えた .outside-version / 指紋の行が無い .outside-version (tag だけ) / 置き場が無い
+    mocks: 取得元は test が作った bare repo。--check の間は 取得元を消して 網に行かない事を確かめる。
+    expect: >
+      直後は exit 0。中身を変えた・足した・消した は exit 1 で その path と 違う・増えた・消えた を名指す。行の書き換えは exit 1。
+      指紋の行が無い・置き場が無い は exit 3 (判定不能)。1 行目は tag のまま (head -1 で版が引ける)。
+
   - id: TC-OUT-RELEASE
     requirement: REQ-OUT-COMPONENT
     behavior: release.sh <部品> <段> は その部品の最新の tag から次の版を決め 他の部品の tag に影響されない。

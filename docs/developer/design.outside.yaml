@@ -89,6 +89,11 @@ requirements:
       どの部品の どの版を置いたかは 置き場の .outside-version に書く。
   - id: REQ-OUT-VERSION-VISIBLE
     text: 各 project が どの部品の どの版を置いているかを .outside-version から名指せる。project の間の版の違いは 名指すが 止めない。
+  - id: REQ-OUT-VENDOR-INTACT
+    text: >
+      置いた写しが tag の中身のままかを 網に行かずに確かめられる。sync-outside.sh は 写した中身の指紋 (file ごとの sha256 と その全体の sha256) を
+      .outside-version に書き、--check <部品> が 置き場の中身を数え直して照らす。違えば 違う file を名指して 非 0 で終わる
+      (各 project の land の段が 合流後の木で回し 写しの書き換え (古い branch の merge 等) を止める)。
   - id: REQ-OUT-PLATFORM-LAYOUT
     text: >
       adapters 層 (各 project の libs/platform) が 外の依存先ごとの lib の並びのまま保たれる事を 検査で強制する。
@@ -269,12 +274,16 @@ versioning:
   consume:
     how: >
       sync-outside.sh <部品> <tag> (project の中に置く script)。一時の bare repo に その tag だけを取り
-      (git fetch --depth 1)、git archive で 部品の path を取り出し place を丸ごと置き換え .outside-version を書く。部品の test (*_test.go・testdata/・*.test.*・*.spec.ts・*_test.dart・test/) は写さない (REQ-OUT-REAL-TESTED-HERE = 部品の test は この repo の中だけで回す)。
+      (git fetch --depth 1)、git archive で 部品の path を取り出し place を丸ごと置き換え .outside-version (1 行目 = tag、2 行目 = 全体の指紋、続く行 = file ごとの指紋) を書く。部品の test (*_test.go・testdata/・*.test.*・*.spec.ts・*_test.dart・test/) は写さない (REQ-OUT-REAL-TESTED-HERE = 部品の test は この repo の中だけで回す)。
       GitHub は git archive --remote に応じないので 一時の bare repo を経る (実測 2026-11-24)。
     fetch_from: https://github.com/aimglow/outside.git
     fetch_identity: git から取得するのは ccark-gitops の名義 (seat の検査も image の build (gitops) も 同じ)。
     go: project の go.mod は replace で libs/outside/go を指す (module path は github.com/aimglow/outside/go のまま)。
     lint_platform: 各 project の push の前の検査の 1 段 = go -C libs/outside/lint-platform run . check --root ../../platform --vocab ../../../outside-platform.toml。読む物 = libs/platform/**・libs/outside/lint-platform/**・outside-platform.toml。
+    check: >
+      sync-outside.sh --check <部品> (repo の根で実行。網に行かない)。exit 0 = 指紋が一致 / 1 = 違う (違う・増えた・消えた file を名指す。記録の行が全体の指紋と合わない も ここ) /
+      3 = 判定不能 (置き場か .outside-version が無い・指紋の行が無い = 指紋を書く前の sync-outside.sh で置いた写し。取り込み直す)。
+      指紋 = 置き場の file (.outside-version を除く。symlink は 指す先の文字列) の 相対 path の順 (LC_ALL=C) の 『file <sha256> <path>』 の行と その行の並びの sha256。
     registry: 有料の registry にも 公開の registry にも 登録しない。
 
 delivery:

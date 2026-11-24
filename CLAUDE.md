@@ -34,7 +34,7 @@ outside は 全 project が module として取り込む共通部品である。
 2. 門番が 門番規約に照らして審査し、Real・Mock・両面の test を実装し、`./scripts/release.sh <部品> <major|minor|patch>` で test を回して tag を切る。
 3. 門番が `RELEASE_SUCCESS: <tag>` を 依頼元へ `ccark send` で返す。
 4. 依頼元が `./scripts/sync-outside.sh <部品> <tag>` で その tag を 一時の bare repo に取り `git archive` で 部品の dir を取り出し
-   置き場 (設計書の components の place) を丸ごと置き換える (`.outside-version` に tag を記録する)。部品ごとに 版を選べる。
+   置き場 (設計書の components の place) を丸ごと置き換える (`.outside-version` に tag と 写した中身の指紋を記録する。`--check <部品>` が 網に行かずに 写しが tag どおりかを確かめる)。部品ごとに 版を選べる。
 5. 依頼元は 置いた写しを編集しない。この部品の test は 置き場では回さない (Nx の project として test の target を持たせない)。
 
 - 版は tag で固定して使う。main を追わない。全 project が 同じ版を使う。
