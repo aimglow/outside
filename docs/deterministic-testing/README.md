@@ -19,7 +19,7 @@ AI エージェントによる自律開発では、プロンプトによる自�
 
 ## 2. 解決アーキテクチャの全体像
 
-Nx ワークスペース内の `libs/share/` に **`outside/`** と **`adapters/`** の 2 層を設けることで、外部境界を完全に隔離します。
+Nx ワークスペース内の `libs/outside/`（OS・ランタイム境界）と `libs/platform/`（adapters 層 = 外部の依存先ごとに 1 lib）の 2 層で、外部境界を完全に隔離します。
 
 ```text
 workspace/
@@ -31,16 +31,16 @@ workspace/
 │   ├── admin-console/                     # [Angular] 業務SPAアプリ
 │   └── mobile-client/                     # [Flutter] モバイルアプリ
 ├── libs/
-│   └── share/
-│       ├── outside/                       # 【第1層】OS・言語ランタイム境界（共有・不変・タグ同期）
-│       │   ├── go/                        # afero.Fs, Clock(Advance付), CmdRunner, IdGen, SysInfo
-│       │   ├── next/                      # node:fs + memfs, exec, env, now, idGen
-│       │   ├── angular/                   # Browser Storage(Mock), now, idGen, location/navigator
-│       │   └── flutter/                   # package:file, package:clock, ProcessRunner, Env, IdGen
-│       └── adapters/                      # 【第2層】プロジェクト・FW固有の外部境界（Real / Mock分離）
-│           ├── auth-cookie/               # Next.js / Angular 共通Cookie仕様アダプタ
-│           ├── session-ipc/               # AI開発基盤用 セッション間通信(UDS/InMemory)アダプタ
-│           └── ledger-store/              # 機体間共有キャッシュ台帳ストレージアダプタ
+│   ├── outside/                           # 【第1層】OS・言語ランタイム境界（共有・不変・タグ同期）
+│   │   ├── go/                            # afero.Fs, Clock(Advance付), CmdRunner, IdGen, SysInfo
+│   │   ├── next/                          # node:fs + memfs, exec, env, now, idGen
+│   │   ├── angular/                       # Browser Storage(Mock), now, idGen, location/navigator
+│   │   └── flutter/                       # package:file, package:clock, ProcessRunner, Env, IdGen
+│   └── platform/                          # 【第2層】adapters 層 = 外部の依存先ごとに 1 lib（interface / real / mock）
+│       ├── pg-postgres-go/                # 例: PostgreSQL への接続境界
+│       ├── authn-google-iap-go/           # 例: Google IAP の認証境界
+│       ├── git-cli-go/                    # 例: git CLI の境界
+│       └── auth-cookie-next/              # 例: Next.js の Cookie 境界
 └── scripts/
     ├── sync-outside.sh                    # outside 別リポジトリから git archive でタグ同期
     └── check-forbidden.sh                 # 禁止構文・実機絶対パス検出スクリプト
