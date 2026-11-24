@@ -55,8 +55,8 @@ workspace/
 | **`01_architecture_overview.md`** | アーキテクト / 開発者 | Nx ワークスペース構成、`outside/{go,angular,next,flutter}` と `adapters` の責務境界、別リポジトリ＋`git archive` 運用の整合性 |
 | **`02_non_deterministic_catalog.md`** | 全開発者 / AI | キャッシュを破壊する全非決定要素カタログ（AI開発基盤特有の PID・UDS・FS監視・Ticker・Map順序から BtoC 端末境界まで） |
 | **`03_test_classification_and_anti_patterns.md`** | 全開発者 / AI | テストの目的と手段の分類（分類A/B/C）、愚かなテストの排除基準、Integration テストの物理的隔離ルール |
-| **`04_outside_spec_and_implementations.md`** | 基盤実装者 / AI | `libs/share/outside/{go,angular,next,flutter}` の標準インターフェースと `Real` / `Mock` 完全実装リファレンス |
-| **`05_adapters_design_and_patterns.md`** | アプリ実装者 / AI | `libs/share/adapters/` および `apps/*/adapters/` の 3 ファイル分離（`interface` / `real` / `mock`）と具体実装パターン |
+| **`04_outside_spec_and_implementations.md`** | 基盤実装者 / AI | `libs/outside/{go,angular,next,flutter}` の標準インターフェースと `Real` / `Mock` 完全実装リファレンス |
+| **`05_adapters_design_and_patterns.md`** | アプリ実装者 / AI | `libs/platform/` および `apps/*/platform/` の 3 ファイル分離（`interface` / `real` / `mock`）と具体実装パターン |
 | **`06_lint_and_nx_enforcement.md`** | Tech Lead / CI担当 | `@nx/enforce-module-boundaries`、`golangci-lint`、ESLint、Dart禁則チェック、`nx.json` キャッシュ最適化設定 |
 | **`07_agents_md_app_template.md`** | **Claude Code（本体用）** | 各アプリ・本体ワークスペースにそのまま配置する `CLAUDE.md` 完成版（判断基準・雛形・Relayプロトコル完備） |
 | **`08_agents_md_outside_gatekeeper.md`** | **Claude Code（門番用）** | `outside` 基盤専用セッションに読み込ませる厳格な門番 `CLAUDE.md`（業務ロジック・FW依存混入防止） |
@@ -66,8 +66,8 @@ workspace/
 
 ## 4. 導入ロードマップ（推奨ステップ）
 
-1. **Step 1（基盤の確定）:** `04` および `08` を基に `outside` 基盤を整備し、`release.sh` で初回タグ（`v0.1.0`）を発行、`sync-outside.sh` で `libs/share/outside/{go,angular,next,flutter}` へ展開する。
+1. **Step 1（基盤の確定）:** `04` および `08` を基に `outside` 基盤を整備し、`release.sh` で初回タグ（`v0.1.0`）を発行、`sync-outside.sh` で `libs/outside/{go,angular,next,flutter}` へ展開する。
 2. **Step 2（機械的ガードレールの設置）:** `06` の Lint ルール（生IO・生時刻・実機絶対パスの禁止）と Nx モジュール境界ルールをワークスペースに導入する。
 3. **Step 3（AI製造規約の配置）:** `07` をワークスペースルートの `CLAUDE.md` として配置し、新規実装およびリファクタリングから全適用する。
 4. **Step 4（最優先領域の移行）:** 最もキャッシュ効果の高い **AI開発基盤（セッションRelay・台帳・監視Daemon）** から `outside` / `adapters` へ移行し、CI 実行時間を数時間から数分へ短縮する。
-5. **Step 5（業務システム・BtoCアプリへの展開）:** `libs/share/adapters` に共通アダプタ（Cookie、認証、HTTP等）を整備し、Next.js / Angular / Flutter アプリへ横展開する。
+5. **Step 5（業務システム・BtoCアプリへの展開）:** `libs/platform` に共通アダプタ（Cookie、認証、HTTP等）を整備し、Next.js / Angular / Flutter アプリへ横展開する。

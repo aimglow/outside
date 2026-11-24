@@ -1,6 +1,6 @@
-# 04. `libs/share/outside/{go,angular,next,flutter}` 標準仕様と実装リファレンス
+# 04. `libs/outside/{go,angular,next,flutter}` 標準仕様と実装リファレンス
 
-本章では、Nx ワークスペースの `libs/share/outside/` 配下に配置する 4 つのランタイム基盤の標準インターフェースと、`Real`（本番用）・`Mock`（テスト用）の完全な実装リファレンスを定義します。
+本章では、Nx ワークスペースの `libs/outside/` 配下に配置する 4 つのランタイム基盤の標準インターフェースと、`Real`（本番用）・`Mock`（テスト用）の完全な実装リファレンスを定義します。
 
 ---
 
@@ -12,12 +12,12 @@
 
 ---
 
-## 2. `libs/share/outside/go`（Go ランタイム）
+## 2. `libs/outside/go`（Go ランタイム）
 
 AI開発基盤（Session Relay・台帳・監視 Daemon）を完全に決定論化するため、`afero.Fs` に加えて **タイマー進行（`Advance`）付き仮想時計**・**決定論的 `IdGen`**・**固定 `SysInfo`** を備えます。
 
 ```go
-// libs/share/outside/go/outside.go
+// libs/outside/go/outside.go
 package outside
 
 import (
@@ -212,12 +212,12 @@ func NewMock(fixedTime time.Time) *Env {
 
 ---
 
-## 3. `libs/share/outside/next`（Next.js / Node.js ランタイム）
+## 3. `libs/outside/next`（Next.js / Node.js ランタイム）
 
 サーバーサイド（Route Handler / Server Action / UseCase）向けの OS 境界です。
 
 ```typescript
-// libs/share/outside/next/index.ts
+// libs/outside/next/index.ts
 import * as realFs from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -290,12 +290,12 @@ export function createMockOutside(fixedIso = '2026-01-01T00:00:00.000Z'): MockOu
 
 ---
 
-## 4. `libs/share/outside/angular`（Angular / ブラウザ ランタイム）
+## 4. `libs/outside/angular`（Angular / ブラウザ ランタイム）
 
 ブラウザ環境には Node.js の `fs` や `process.env` が存在しないため、ブラウザ固有の非決定要素（時計・乱数・Web Storage・Location 情報）を隔離します。
 
 ```typescript
-// libs/share/outside/angular/index.ts
+// libs/outside/angular/index.ts
 export interface KeyValueStorage {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -360,12 +360,12 @@ export function createMockBrowserOutside(
 
 ---
 
-## 5. `libs/share/outside/flutter`（Dart / Flutter ランタイム）
+## 5. `libs/outside/flutter`（Dart / Flutter ランタイム）
 
 `package:flutter` を一切 `import` しない Pure Dart 構成とすることで、UI なしの高速な `dart test` / `flutter test` キャッシュを保証します。
 
 ```dart
-// libs/share/outside/flutter/lib/outside.dart
+// libs/outside/flutter/lib/outside.dart
 import 'dart:io' as io;
 import 'package:file/file.dart';
 import 'package:file/local.dart';

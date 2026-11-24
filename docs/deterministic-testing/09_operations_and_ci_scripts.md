@@ -1,6 +1,6 @@
 # 09. 運用フロー・マイクロ CI/CD および同期スクリプト集
 
-本章では、`outside` 専用セッションへの `relay` 運用、ローカル完結型のマイクロ CI/CD スクリプト（`release.sh`）、および Nx ワークスペース内の `libs/share/outside/{go,angular,next,flutter}` へクリーンに展開する同期スクリプト（`sync-outside.sh`）を定義します。
+本章では、`outside` 専用セッションへの `relay` 運用、ローカル完結型のマイクロ CI/CD スクリプト（`release.sh`）、および Nx ワークスペース内の `libs/outside/{go,angular,next,flutter}` へクリーンに展開する同期スクリプト（`sync-outside.sh`）を定義します。
 
 ---
 
@@ -22,7 +22,7 @@
 ├── CLAUDE.md                  # 07_agents_md_app_template.md を配置
 ├── scripts/
 │   └── sync-outside.sh        # git archive によるクリーン同期スクリプト
-└── libs/share/outside/
+└── libs/outside/
     ├── go/
     ├── next/
     ├── angular/
@@ -119,7 +119,7 @@ exit 1
 
 ## 3. 本体 Nx ワークスペース用：`scripts/sync-outside.sh`
 
-指定されたランタイム（`go` / `next` / `angular` / `flutter` / `all`）とタグについて、`libs/share/outside/<target>` を完全に削除したうえで `git archive` によりクリーン展開します。
+指定されたランタイム（`go` / `next` / `angular` / `flutter` / `all`）とタグについて、`libs/outside/<target>` を完全に削除したうえで `git archive` によりクリーン展開します。
 
 ```bash
 #!/usr/bin/env bash
@@ -143,7 +143,7 @@ cd "$REPO_ROOT"
 
 sync_one() {
   local lang="$1"
-  local dest="libs/share/outside/${lang}"
+  local dest="libs/outside/${lang}"
 
   echo "==> Cleaning old directory: ${dest}"
   rm -rf "$dest"

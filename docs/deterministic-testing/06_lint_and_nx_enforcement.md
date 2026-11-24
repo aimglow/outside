@@ -8,8 +8,8 @@ AI エージェントに規約を守らせる最大の鍵は、プロンプト�
 
 各プロジェクトの `project.json` に以下のタグを付与します。
 
-- `libs/share/outside/*`: `["scope:outside"]`
-- `libs/share/adapters/*`: `["scope:adapter"]`
+- `libs/outside/*`: `["scope:outside"]`
+- `libs/platform/*`: `["scope:adapter"]`
 - `apps/*`: `["scope:app"]`
 
 ワークスペースルートの `eslint.config.js` で依存方向をロックします。
@@ -51,14 +51,14 @@ AI エージェントに規約を守らせる最大の鍵は、プロンプト�
 
 ## 2. TypeScript（Next.js / Angular）禁止構文・実機パス禁止 ESLint
 
-`libs/share/outside/**` および `**/adapters/**/real.ts` **以外**のすべてのファイル（ビジネスロジック、`mock.ts`、Unit テスト）に適用します。
+`libs/outside/**` および `**/adapters/**/real.ts` **以外**のすべてのファイル（ビジネスロジック、`mock.ts`、Unit テスト）に適用します。
 
 ```javascript
 // eslint.config.js（非決定要素・生IO・実機絶対パス禁止ルール）
 {
   files: ['**/*.ts', '**/*.tsx'],
   ignores: [
-    'libs/share/outside/**',
+    'libs/outside/**',
     '**/adapters/**/real.ts',
     '**/main.ts',
   ],
@@ -144,7 +144,7 @@ linters-settings:
 issues:
   exclude-rules:
     # outside 基盤と、アダプタの本番実装(*_real.go)および main.go のみ許可
-    - path: ^(libs/share/outside/go/|.*/adapters/.*_real\.go$|.*/cmd/.*/main\.go$)
+    - path: ^(libs/outside/go/|.*/adapters/.*_real\.go$|.*/cmd/.*/main\.go$)
       linters:
         - forbidigo
 ```
@@ -156,8 +156,8 @@ issues:
 Dart は標準アナライザだけではメソッド単位の禁止ができないため、`outside` の `lint/dart`（`outside_lint`、`package:analyzer` の構文木を読む）を Nx の `lint` ターゲットで回す。grep の正規表現より誤検出が無く、`DateTime.now`・`Platform.environment`・`Process.run` 等・`File(...)`・`Directory(...)`・`Directory.systemTemp`・`HttpClient(...)`・`Timer(...)` を行番号つきで名指す。
 
 ```bash
-# libs/share/outside/flutter と *_real.dart と main.dart を除く全 Dart を検査する
-dart run outside_lint:check apps libs/share/adapters
+# libs/outside/flutter と *_real.dart と main.dart を除く全 Dart を検査する
+dart run outside_lint:check apps libs/platform
 # exit 0 = 違反なし / 1 = 違反あり / 3 = 読めない file（判定不能）
 ```
 

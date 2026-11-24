@@ -1,6 +1,6 @@
 # 05. `adapters` 設計・Real/Mock 分離と実装パターン
 
-`libs/share/adapters/` および `apps/<app>/src/adapters/` は、フレームワーク固有 API（Cookie、Flutter プラグイン等）やプロジェクト固有の外部境界（セッション間 IPC 通信、台帳ストレージ、外部 API 等）を隔離するレイヤーです。
+`libs/platform/` および `apps/<app>/src/platform/` は、フレームワーク固有 API（Cookie、Flutter プラグイン等）やプロジェクト固有の外部境界（セッション間 IPC 通信、台帳ストレージ、外部 API 等）を隔離するレイヤーです。
 
 ---
 
@@ -11,7 +11,7 @@ AI に `adapters/` の作成を許可すると、手抜きをして **`Mock` 実
 これを防ぐため、すべてのアダプタは必ず以下の **3 ファイル構造** に分割し、`real` だけに生の外部 API 利用を許可します。
 
 ```text
-libs/share/adapters/auth-cookie/
+libs/platform/auth-cookie/
 ├── interface.ts   # 純粋な型・インターフェース定義のみ（依存ゼロ）
 ├── real.ts        # 【唯一許可】Next.js cookies() やブラウザ API を呼ぶ薄い接着剤
 └── mock.ts        # 【厳格制限】インメモリ実装。ビジネスロジックと同等のLint制限を受ける
@@ -27,12 +27,12 @@ Go / Dart の場合のファイル命名規則：
 
 ---
 
-## 2. パターン①：Next.js Cookie アダプタ（`libs/share/adapters/auth-cookie`）
+## 2. パターン①：Next.js Cookie アダプタ（`libs/platform/auth-cookie`）
 
 プロジェクトやステージごとに属性や運用が変わる Cookie は `outside` ではなく `adapters` で隔離します。
 
 ```typescript
-// libs/share/adapters/auth-cookie/interface.ts
+// libs/platform/auth-cookie/interface.ts
 export interface CookieOptions {
   httpOnly: boolean;
   secure: boolean;
@@ -49,7 +49,7 @@ export interface AuthCookieAdapter {
 ```
 
 ```typescript
-// libs/share/adapters/auth-cookie/real.ts
+// libs/platform/auth-cookie/real.ts
 import { cookies } from 'next/headers';
 import type { AuthCookieAdapter, CookieOptions } from './interface';
 
@@ -80,7 +80,7 @@ export class NextAuthCookieAdapter implements AuthCookieAdapter {
 ```
 
 ```typescript
-// libs/share/adapters/auth-cookie/mock.ts
+// libs/platform/auth-cookie/mock.ts
 import type { AuthCookieAdapter, CookieOptions } from './interface';
 
 export class MockAuthCookieAdapter implements AuthCookieAdapter {
@@ -110,7 +110,7 @@ export class MockAuthCookieAdapter implements AuthCookieAdapter {
 Unix Domain Socket（UDS）やローカル TCP を使ったセッション同士の `relay` 通信を、実ソケットを開かずにテスト可能にするパターンです。
 
 ```go
-// libs/share/adapters/session-ipc/interface.go
+// libs/platform/session-ipc/interface.go
 package sessionipc
 
 import "context"
@@ -128,7 +128,7 @@ type Transport interface {
 ```
 
 ```go
-// libs/share/adapters/session-ipc/adapter_mock.go
+// libs/platform/session-ipc/adapter_mock.go
 package sessionipc
 
 import (
@@ -178,7 +178,7 @@ Angular では `BrowserOutside` と各種アダプタを `InjectionToken` 経由
 ```typescript
 // apps/admin-console/src/app/core/tokens.ts
 import { InjectionToken } from '@angular/core';
-import type { BrowserOutside } from '@share/outside/angular';
+import type { BrowserOutside } from '@outside/angular';
 
 export const BROWSER_OUTSIDE = new InjectionToken<BrowserOutside>('BROWSER_OUTSIDE');
 ```
@@ -186,7 +186,7 @@ export const BROWSER_OUTSIDE = new InjectionToken<BrowserOutside>('BROWSER_OUTSI
 ```typescript
 // apps/admin-console/src/app/features/auth/token.service.spec.ts
 import { TestBed } from '@angular/core/testing';
-import { createMockBrowserOutside } from '@share/outside/angular';
+import { createMockBrowserOutside } from '@outside/angular';
 import { BROWSER_OUTSIDE } from '../../core/tokens';
 import { TokenService } from './token.service';
 
@@ -215,13 +215,13 @@ describe('TokenService', () => {
 Flutter のネイティブプラグインは共有 `outside/flutter` に入れず、アプリまたは共有 `adapters` に切り出します。
 
 ```dart
-// libs/share/adapters/kv-storage/interface.dart
+// libs/platform/kv-storage/interface.dart
 abstract class KvStorage {
   Future<String?> read(String key);
   Future<void> write(String key, String value);
 }
 
-// libs/share/adapters/kv-storage/adapter_mock.dart
+// libs/platform/kv-storage/adapter_mock.dart
 class MockKvStorage implements KvStorage {
   final Map<String, String> _data = {};
 

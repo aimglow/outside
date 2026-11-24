@@ -8,8 +8,8 @@
 
 | レイヤー | Nx 配置パス | 管理単位 | 責務（何を持つか） | 選定の絶対基準 |
 | :--- | :--- | :--- | :--- | :--- |
-| **第1層: `outside`** | `libs/share/outside/{go,angular,next,flutter}` | 別リポジトリ管理<br>＋ `git archive` タグ同期 | 各言語・ランタイムの純粋な OS / 環境境界の `Real` と `Mock` セット | **「3年後に全く別の新規プロジェクトを作るとき、1ミリも変えずに使えるか？」→ YES のみ** |
-| **第2層: `adapters`** | `libs/share/adapters/*`<br>（または `apps/<app>/adapters/*`） | Nx モノレポ内で管理 | Cookie 運用、認証、特定 CLI ラッパー、UDS/IPC 通信、Flutter プラグイン等 | 特定のフレームワーク・外部サービス・業務仕様に少しでも依存するもの |
+| **第1層: `outside`** | `libs/outside/{go,angular,next,flutter}` | 別リポジトリ管理<br>＋ `git archive` タグ同期 | 各言語・ランタイムの純粋な OS / 環境境界の `Real` と `Mock` セット | **「3年後に全く別の新規プロジェクトを作るとき、1ミリも変えずに使えるか？」→ YES のみ** |
+| **第2層: `adapters`** | `libs/platform/*`<br>（または `apps/<app>/adapters/*`） | Nx モノレポ内で管理 | Cookie 運用、認証、特定 CLI ラッパー、UDS/IPC 通信、Flutter プラグイン等 | 特定のフレームワーク・外部サービス・業務仕様に少しでも依存するもの |
 
 ---
 
@@ -17,27 +17,29 @@
 
 単なる言語単位（`go`, `ts`, `dart`）ではなく、**実行ランタイム環境**を基準に 4 サブディレクトリへ分割することで、過不足のない抽象化を実現します。
 
-1. **`libs/share/outside/go`（システム・デーモン・CLI ランタイム）**
+1. **`libs/outside/go`（システム・デーモン・CLI ランタイム）**
    - OS ファイルシステム（`afero`）、仮想時計＋Ticker 制御（`Clock`）、外部プロセス実行（`CmdRunner`）、環境変数（`Env`）、決定論的 ID 生成（`IdGen`）、マシン識別子（`SysInfo`）を提供。
-2. **`libs/share/outside/next`（Node.js サーバー／SSR ランタイム）**
+2. **`libs/outside/next`（Node.js サーバー／SSR ランタイム）**
    - `node:fs/promises`（`memfs` 連携）、`child_process`（`exec`）、`process.env`（仮想環境変数マップ）、サーバー時刻（`now`）、決定論的 ID（`idGen`）を提供。
-3. **`libs/share/outside/angular`（ブラウザ DOM／SPA ランタイム）**
+3. **`libs/outside/angular`（ブラウザ DOM／SPA ランタイム）**
    - ブラウザには `node:fs` が存在しない代わりに、`localStorage` / `sessionStorage` のインメモリ Mock、ブラウザ時計（`now`）、決定論的 ID（`idGen`）、`location` / `navigator` 情報の抽象インターフェースを提供。
-4. **`libs/share/outside/flutter`（Dart / モバイル・デスクトップ ランタイム）**
+4. **`libs/outside/flutter`（Dart / モバイル・デスクトップ ランタイム）**
    - `package:flutter` への依存を排除した Pure Dart 構成で、`package:file`（`MemoryFileSystem`）、`package:clock`（`Clock.fixed`）、`ProcessRunner`、`Env`、`IdGen` を提供。Flutter 固有の `MethodChannel` や `SharedPreferences` は `adapters/` 側で隔離する。
 
 > **重要:** 4 区分に分かれていても、**「業務ドメイン用語・特定外部ツール名（`git`, `docker`, `ffmpeg` 等）・アプリ固有の設定キー」を `outside` に持ち込まない**という門番ルールは全 4 区分で共通です。
 
 ---
 
-## 3. `libs/share/adapters` と `apps/<app>/adapters` の棲み分け
+## 3. `libs/platform`（adapters 層）の分け方と棲み分け
+
+adapters 層は **外部の依存先（target）ごとに 1 つの lib** に分ける。名前は `<機能>-<依存先>-<言語>`（例: `pg-postgres-go`・`authn-google-iap-go`・`git-cli-go`・`podman-cli-go`）。外部の依存先ごとに分けるので、ある依存先の版や挙動が変わっても 他の lib と それに依らないアプリの検査は回らない。実外部に触れるテストは その lib の中だけに置く。
 
 Nx モノレポ内のアダプタ配置は、再利用範囲によって 2 段階に分けます。
 
-- **`libs/share/adapters/<feature>/`（複数アプリ共有アダプタ）**
+- **`libs/platform/<feature>/`（複数アプリ共有アダプタ）**
   - 複数のアプリやサービスで同一仕様を共有する外部境界。
   - 例: `auth-cookie`（Next.js / Angular 共通の Cookie セキュリティ属性仕様）、`ledger-client`（機体間キャッシュ台帳へのアクセス境界）、`llm-gateway`（LLM API 呼び出し境界）。
-- **`apps/<app>/src/adapters/<feature>/`（単一アプリ固有アダプタ）**
+- **`apps/<app>/src/platform/<feature>/`（単一アプリ固有アダプタ）**
   - そのアプリケーションでしか使わない外部連携やフレームワーク境界。
   - 例: 特定アプリ専用の Flutter ネイティブプラグインラッパー、特定業務システムのレガシー SOAP/REST クライアント。
 
@@ -52,7 +54,7 @@ Nx の `@nx/enforce-module-boundaries` を用いて、以下の依存方向を�
      │
      ├──────────────────────────────┐
      ▼                              ▼
-[ libs/share/adapters/* ]    [ libs/share/outside/* ]
+[ libs/platform/* ]    [ libs/outside/* ]
      │                              ▲
      └──────────────────────────────┘
 ```
@@ -65,9 +67,9 @@ Nx の `@nx/enforce-module-boundaries` を用いて、以下の依存方向を�
 
 ## 5. 別リポジトリ（`outside`）＋ `git archive` 運用との接続
 
-`outside` を別リポジトリとして管理し、`git archive` で `libs/share/outside/{go,angular,next,flutter}` に展開する運用は、Nx モノレポと極めて高い親和性を持ちます。
+`outside` を別リポジトリとして管理し、`git archive` で `libs/outside/{go,angular,next,flutter}` に展開する運用は、Nx モノレポと極めて高い親和性を持ちます。
 
 ### このハイブリッド運用が優れている理由
 1. **認証・レジストリ問題のゼロ化:** プライベート npm / pub / Go proxy の認証設定が不要になり、ローカル・CI・コンテナのどこでも同じファイルハッシュで Nx キャッシュが効く。
-2. **AI が実体を直接読める:** `libs/share/outside/` 配下に実ソースファイルが展開されているため、Claude Code が型定義や `Mock` のヘルパーメソッドを推測せずに直接 `Read` できる。
-3. **本流への還元サイクルの確立:** 展開先（`libs/share/outside/`）の直接編集を禁止し、不足機能は必ず `outside` 専用セッションへ `relay` してタグ発行 → `sync-outside.sh` で取り込むフローにすることで、全プロジェクトで品質が統一される。
+2. **AI が実体を直接読める:** `libs/outside/` 配下に実ソースファイルが展開されているため、Claude Code が型定義や `Mock` のヘルパーメソッドを推測せずに直接 `Read` できる。
+3. **本流への還元サイクルの確立:** 展開先（`libs/outside/`）の直接編集を禁止し、不足機能は必ず `outside` 専用セッションへ `relay` してタグ発行 → `sync-outside.sh` で取り込むフローにすることで、全プロジェクトで品質が統一される。

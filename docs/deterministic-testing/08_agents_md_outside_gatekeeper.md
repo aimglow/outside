@@ -1,6 +1,6 @@
 # CLAUDE.md — `outside` 基盤ライブラリ 門番規約（専用セッション用）
 
-> 本ファイルは、共有基盤リポジトリ `outside`（展開先: `libs/share/outside/{go,angular,next,flutter}`）を管理する専用セッションに読み込ませる厳格な門番規約です。
+> 本ファイルは、共有基盤リポジトリ `outside`（展開先: `libs/outside/{go,angular,next,flutter}`）を管理する専用セッションに読み込ませる厳格な門番規約です。
 
 ---
 
