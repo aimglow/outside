@@ -4,9 +4,14 @@ package lintgo
 
 import (
 	"os/exec"
-	"strings"
+	"reflect"
+	"regexp"
+	"strconv"
 	"testing"
 )
+
+// issueRe は golangci-lint の 1 件の行 (bad.go の行の番号と 名指した呼び出し)。
+var issueRe = regexp.MustCompile("bad/bad\\.go:(\\d+):\\d+: use of `([^`]+)` forbidden")
 
 // run は fixture の dir で golangci-lint を撃ち 出力と終了の番号を返す。
 func run(t *testing.T, target string) (string, int) {
@@ -31,10 +36,32 @@ func TestLintGo_TC_OUT_LINT_GO_落とす(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("外を直に呼ぶ code が通った:\n%s", out)
 	}
-	for _, want := range []string{"time.Now", "os.Getenv", "exec.Command", "os.MkdirTemp", "os.ReadFile"} {
-		if !strings.Contains(out, "`"+want+"`") {
-			t.Errorf("%s を名指していない:\n%s", want, out)
-		}
+	// 期待 = bad.go の行 → 名指す呼び出し (import の別名のまま名指される)。種類ごとに 1 つ以上。
+	want := map[int]string{
+		14: "time.Now",
+		15: "os.Getenv",
+		16: "exec.Command",
+		17: "os.MkdirTemp",
+		18: "os.ReadFile",
+		19: "os.Hostname",
+		20: "os.Getpid",
+		21: "os.Getppid",
+		22: "os.Getwd",
+		23: "os.UserHomeDir",
+		24: "os.UserConfigDir",
+		25: "os.UserCacheDir",
+		26: "rand.Intn",
+		27: "randv2.IntN",
+		28: "crand.Read",
+		29: "crand.Text",
+	}
+	got := map[int]string{}
+	for _, m := range issueRe.FindAllStringSubmatch(out, -1) {
+		line, _ := strconv.Atoi(m[1])
+		got[line] = m[2]
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("名指した行 = %v\n期待 = %v\n出力:\n%s", got, want, out)
 	}
 }
 

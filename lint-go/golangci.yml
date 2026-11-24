@@ -11,8 +11,17 @@ linters:
       forbid:
         - pattern: ^time\.(Now|Since|Until|Sleep|After|Tick|NewTimer|NewTicker)$
           msg: 時計は outside の Clock を通す
-        - pattern: ^os\.(Getenv|LookupEnv|Environ|Setenv|Unsetenv|Hostname)$
-          msg: 環境と機体の値は outside の Env を通す
+        - pattern: ^os\.(Getenv|LookupEnv|Environ|Setenv|Unsetenv)$
+          msg: 環境変数は outside の Env を通す
+        - pattern: ^os\.(Hostname|Getpid|Getppid|Getwd|UserHomeDir|UserConfigDir|UserCacheDir)$
+          msg: 機体と process の値は outside の SysInfo を通す
+        # analyze-types の下では pattern は「package の名前.名前」(import の別名でなく 型から引いた名前) に、
+        # pkg は import path に照らされる。math/rand・math/rand/v2・crypto/rand は 名前が同じ rand ゆえ pkg で区切る
+        # (pattern に import path を書いても 当たらない。pkg が無いと 自作の rand という名前の package まで落とす)。
+        # 型 (rand.Rand) と その method (r.Intn) も 同じ pattern で当たる。
+        - pattern: ^rand\.
+          pkg: ^(math/rand|math/rand/v2|crypto/rand)$
+          msg: 乱数と ID は outside の IdGen を通す
         - pattern: ^exec\.(Command|CommandContext|LookPath)$
           msg: 子 process は outside の Proc を通す
         - pattern: ^os\.(TempDir|MkdirTemp|CreateTemp)$
