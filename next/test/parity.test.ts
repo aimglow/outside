@@ -11,6 +11,7 @@ const DESIGN_PORTS: Record<string, string[]> = {
   storage: ['get', 'set', 'remove'],
   config: ['get'],
   idGen: ['newId'],
+  random: ['read'],
 };
 
 // port が持つ関数の名前の一覧。

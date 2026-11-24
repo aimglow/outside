@@ -6,6 +6,7 @@ import {
   createRealConfig,
   createRealHttp,
   createRealIdGen,
+  createRealRandom,
   createRealStorage,
   type FetchLike,
   type WebStorageLike,
@@ -15,6 +16,7 @@ import {
   createMockConfig,
   createMockHttp,
   createMockIdGen,
+  createMockRandom,
   createMockStorage,
   type MockHttpRoute,
 } from '../src/mock/index';
@@ -23,6 +25,7 @@ import {
   configContract,
   httpContract,
   idGenContract,
+  randomContract,
   storageContract,
   type ContractRoute,
 } from './contract';
@@ -96,3 +99,7 @@ configContract('mock', (table) => createMockConfig(table));
 // real の IdGen: 実行環境の crypto.randomUUID を使う (乱数は 外から何も読まない)。
 idGenContract('real', () => createRealIdGen());
 idGenContract('mock', () => createMockIdGen());
+
+// real の Random: 実行環境の crypto.getRandomValues を使う (乱数は 外から何も読まない)。
+randomContract('real', () => createRealRandom());
+randomContract('mock', () => createMockRandom('contract'));

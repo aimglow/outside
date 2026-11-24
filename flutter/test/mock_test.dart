@@ -1,4 +1,7 @@
 // mock だけが持つ振る舞い (渡した値だけで決まる・呼ばれた内容が読める)。
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:outside/mock.dart';
 import 'package:outside/outside.dart';
 import 'package:test/test.dart';
@@ -153,6 +156,93 @@ void main() {
       idGen.newId();
       idGen.newId();
       expect(idGen.calls, 2);
+    });
+  });
+
+  group('TC-OUT-RANDOM-FE MockRandom', () {
+    List<int> read(MockRandom random, int n) {
+      final buf = Uint8List(n);
+      random.read(buf);
+      return buf;
+    }
+
+    test('同じ種・同じ呼び順なら 同じ byte', () {
+      final a = MockRandom.text('seed-a');
+      final b = MockRandom.text('seed-a');
+      expect([read(a, 16), read(a, 8)], [read(b, 16), read(b, 8)]);
+      expect(read(MockRandom([1, 2, 3]), 16), read(MockRandom([1, 2, 3]), 16));
+    });
+
+    test('文字列の種は その UTF-8 の byte 列の種と同じ列', () {
+      expect(
+        read(MockRandom.text('種'), 16),
+        read(MockRandom(utf8.encode('種')), 16),
+      );
+    });
+
+    test('違う種は 違う byte', () {
+      expect(
+        read(MockRandom.text('seed-a'), 24),
+        isNot(equals(read(MockRandom.text('seed-b'), 24))),
+      );
+      expect(
+        read(MockRandom(const []), 24),
+        isNot(equals(read(MockRandom(const [0]), 24))),
+      );
+    });
+
+    test('分けて読んでも 続けて読んでも 同じ列', () {
+      final whole = read(MockRandom.text('stream'), 24);
+      final split = MockRandom.text('stream');
+      expect([...read(split, 16), ...read(split, 8)], whole);
+      final odd = MockRandom.text('stream');
+      expect([
+        ...read(odd, 3),
+        ...read(odd, 0),
+        ...read(odd, 5),
+        ...read(odd, 16),
+      ], whole);
+    });
+
+    test(
+      '列は FNV-1a 64bit の種から始まる splitmix64 (next・angular の createMockRandom と同じ列)',
+      () {
+        expect(read(MockRandom.text('outside'), 12), [
+          23,
+          1,
+          114,
+          187,
+          19,
+          129,
+          210,
+          158,
+          59,
+          154,
+          56,
+          168,
+        ]);
+        expect(read(MockRandom.text(''), 4), [48, 255, 164, 107]);
+      },
+    );
+
+    test('読んだ長さを 読んだ順に記録する', () {
+      final random = MockRandom.text('calls');
+      read(random, 16);
+      read(random, 8);
+      read(random, 0);
+      expect(random.calls, [16, 8, 0]);
+    });
+
+    test('withErr の後は その誤りを投げ 記録は残す。withErr(null) で 列の続きに戻る', () {
+      final whole = read(MockRandom.text('err'), 16);
+      final random = MockRandom.text('err');
+      final first = read(random, 8);
+      final err = StateError('entropy exhausted');
+      expect(random.withErr(err), same(random));
+      expect(() => read(random, 4), throwsA(same(err)));
+      expect(random.withErr(null), same(random));
+      expect([...first, ...read(random, 8)], whole);
+      expect(random.calls, [8, 4, 8]);
     });
   });
 }

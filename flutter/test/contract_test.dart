@@ -111,4 +111,7 @@ void main() {
 
   idGenContract('real', RealIdGen.new);
   idGenContract('mock', MockIdGen.new);
+
+  randomContract('real', RealRandom.new);
+  randomContract('mock', () => MockRandom.text('contract'));
 }

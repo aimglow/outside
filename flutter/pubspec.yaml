@@ -1,5 +1,5 @@
 name: outside
-description: 外 (時計・通信・保存・設定・ID) を触る口の共通部品 (iOS と Android 向け、dart:* だけに依存する)。
+description: 外 (時計・通信・保存・設定・ID・乱数) を触る口の共通部品 (iOS と Android 向け、dart:* だけに依存する)。
 version: 0.1.0
 publish_to: none
 

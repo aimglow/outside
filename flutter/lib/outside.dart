@@ -1,4 +1,4 @@
-/// 外 (時計・通信・保存・設定・ID) を触る口と 本物の実装。
+/// 外 (時計・通信・保存・設定・ID・乱数) を触る口と 本物の実装。
 ///
 /// 設計書の ports.frontend_and_mobile との対応 (名前は設計書と同じ):
 /// - Clock: now / setTimeout / clearTimeout
@@ -6,15 +6,20 @@
 /// - Storage: get / set / remove (端末の保存は非同期ゆえ Future を返す)
 /// - Config: get
 /// - IdGen: newId
+/// - Random: read
 ///
 /// 実の時計・timer・環境変数・通信・乱数を呼ぶのは この library の Real* だけ。
 /// 依存は dart:* だけ (package:flutter も plugin も使わない)。
+///
+/// 口 [Random] は dart:math の Random と同じ名前ゆえ この library は dart:math を `math` の名で取り込む。
+/// 両方を使う側は どちらかを prefix 付き (`import 'dart:math' as math;` 等) か `hide Random` で取り込む。
 library;
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show HttpClient, IOException, Platform;
-import 'dart:math' show Random;
+import 'dart:math' as math;
+import 'dart:typed_data' show Uint8List;
 
 /// setTimeout が返す札。clearTimeout に渡す。
 final class TimeoutHandle {
@@ -127,6 +132,12 @@ abstract interface class IdGen {
   String newId();
 }
 
+/// 長さを決めた乱数の byte 列を返す (trace の id・nonce 等)。
+abstract interface class Random {
+  /// buf を 全部 乱数の byte で埋める。
+  void read(Uint8List buf);
+}
+
 /// 1 つの処理に渡す口の組。
 final class OutsideSet {
   const OutsideSet({
@@ -135,6 +146,7 @@ final class OutsideSet {
     required this.storage,
     required this.config,
     required this.idGen,
+    required this.random,
   });
 
   /// 本物の口の組を作る。保存の実体と build 時の設定の表は app が渡す。
@@ -147,6 +159,7 @@ final class OutsideSet {
     storage: RealStorage(storageBackend),
     config: RealConfig(buildTime: buildTimeConfig),
     idGen: RealIdGen(),
+    random: RealRandom(),
   );
 
   final Clock clock;
@@ -154,6 +167,7 @@ final class OutsideSet {
   final Storage storage;
   final Config config;
   final IdGen idGen;
+  final Random random;
 }
 
 /// 実の時計と実の timer を使う Clock。
@@ -256,9 +270,9 @@ final class RealConfig implements Config {
 
 /// 安全な乱数 (Random.secure) で UUID v4 の形の ID を返す IdGen。
 final class RealIdGen implements IdGen {
-  RealIdGen() : _random = Random.secure();
+  RealIdGen() : _random = math.Random.secure();
 
-  final Random _random;
+  final math.Random _random;
 
   @override
   String newId() {
@@ -270,5 +284,19 @@ final class RealIdGen implements IdGen {
     ].join();
     return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-'
         '${hex.substring(16, 20)}-${hex.substring(20)}';
+  }
+}
+
+/// 安全な乱数 (dart:math の Random.secure) で埋める Random。
+final class RealRandom implements Random {
+  RealRandom() : _random = math.Random.secure();
+
+  final math.Random _random;
+
+  @override
+  void read(Uint8List buf) {
+    for (var i = 0; i < buf.length; i++) {
+      buf[i] = _random.nextInt(256);
+    }
   }
 }

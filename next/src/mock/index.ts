@@ -10,6 +10,7 @@ import type {
   IdGen,
   HttpResponse,
   OutsideSet,
+  Random,
   Storage,
   TimerHandle,
 } from '../index';
@@ -194,12 +195,72 @@ export function createMockIdGen(): MockIdGen {
   };
 }
 
+export interface MockRandom extends Random {
+  /** read に渡された buf の長さ (読んだ順)。 */
+  readonly calls: readonly number[];
+  /** 以後の read が err を投げるようにする。undefined を渡すと 列を返す形に戻す。 */
+  withErr(err: Error | undefined): MockRandom;
+}
+
+/** createMockSet が 種を渡されない時に使う種。 */
+export const DEFAULT_MOCK_RANDOM_SEED = 'outside-mock-random';
+
+const MASK64 = (1n << 64n) - 1n;
+
+/**
+ * 種で決まる byte 列を返す Random。同じ種・同じ呼び順なら 同じ byte。
+ * 列 = 種の byte 列の FNV-1a 64bit を初期値とする splitmix64 の出力を 1 つずつ 8 byte (little endian) に開いて並べた物。
+ * 1 本の byte の流れとして持つので 分けて読んでも 続けて読んでも 同じ列。文字列の種は UTF-8 の byte 列にする。
+ */
+export function createMockRandom(seed: Uint8Array | string): MockRandom {
+  const seedBytes = typeof seed === 'string' ? new TextEncoder().encode(seed) : seed;
+  let state = 0xcbf29ce484222325n;
+  for (const b of seedBytes) {
+    state = ((state ^ BigInt(b)) * 0x100000001b3n) & MASK64;
+  }
+  // 今の 8 byte の塊と その中で次に返す位置 (8 なら 次の塊を作る)。
+  const block = new Uint8Array(8);
+  let pos = 8;
+  const nextBlock = (): void => {
+    state = (state + 0x9e3779b97f4a7c15n) & MASK64;
+    let z = state;
+    z = ((z ^ (z >> 30n)) * 0xbf58476d1ce4e5b9n) & MASK64;
+    z = ((z ^ (z >> 27n)) * 0x94d049bb133111ebn) & MASK64;
+    z ^= z >> 31n;
+    for (let i = 0; i < 8; i += 1) {
+      block[i] = Number((z >> BigInt(8 * i)) & 0xffn);
+    }
+    pos = 0;
+  };
+  const calls: number[] = [];
+  let failure: Error | undefined;
+  const mock: MockRandom = {
+    calls,
+    withErr(err) {
+      failure = err;
+      return mock;
+    },
+    read(buf) {
+      calls.push(buf.length);
+      if (failure !== undefined) throw failure;
+      for (let i = 0; i < buf.length; i += 1) {
+        if (pos === 8) nextBlock();
+        buf[i] = block[pos] ?? 0;
+        pos += 1;
+      }
+      return buf;
+    },
+  };
+  return mock;
+}
+
 export interface MockSet extends OutsideSet {
   clock: MockClock;
   http: MockHttp;
   storage: MockStorage;
   config: MockConfig;
   idGen: MockIdGen;
+  random: MockRandom;
 }
 
 export interface MockSetOptions {
@@ -207,6 +268,8 @@ export interface MockSetOptions {
   startMs: number;
   routes?: readonly MockHttpRoute[];
   config?: Readonly<Record<string, string>>;
+  /** Random の種。渡さなければ DEFAULT_MOCK_RANDOM_SEED。 */
+  seed?: Uint8Array | string;
 }
 
 /** mock の port の組を作る。 */
@@ -217,5 +280,6 @@ export function createMockSet(options: MockSetOptions): MockSet {
     storage: createMockStorage(),
     config: createMockConfig(options.config),
     idGen: createMockIdGen(),
+    random: createMockRandom(options.seed ?? DEFAULT_MOCK_RANDOM_SEED),
   };
 }

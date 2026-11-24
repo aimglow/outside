@@ -56,6 +56,12 @@ export interface IdGen {
   newId(): string;
 }
 
+/** 長さを決めた乱数の byte 列を返す (trace の id・nonce 等)。 */
+export interface Random {
+  /** buf を 全部 乱数の byte で埋め 同じ buf を返す。 */
+  read(buf: Uint8Array): Uint8Array;
+}
+
 /** 1 つの処理に渡す port の組。 */
 export interface OutsideSet {
   clock: Clock;
@@ -63,6 +69,7 @@ export interface OutsideSet {
   storage: Storage;
   config: Config;
   idGen: IdGen;
+  random: Random;
 }
 
 /** real が使う fetch の形。 */
@@ -192,6 +199,26 @@ export function createRealIdGen(): IdGen {
   };
 }
 
+/** crypto.getRandomValues が 1 回に埋められる byte の上限。 */
+const GET_RANDOM_VALUES_MAX = 65536;
+
+/** crypto.getRandomValues で埋める Random。crypto は 使う時に取る。上限より長い buf は 分けて埋める。 */
+export function createRealRandom(): Random {
+  return {
+    read(buf) {
+      const crypto = needGlobal<{ getRandomValues?: (array: Uint8Array) => Uint8Array }>('crypto');
+      if (typeof crypto.getRandomValues !== 'function') {
+        throw new Error('outside: crypto.getRandomValues is not available in this environment');
+      }
+      for (let start = 0; start < buf.length; start += GET_RANDOM_VALUES_MAX) {
+        // this が外れると動かない実装があるため crypto の method として呼ぶ。
+        crypto.getRandomValues(buf.subarray(start, start + GET_RANDOM_VALUES_MAX));
+      }
+      return buf;
+    },
+  };
+}
+
 export interface RealSetOptions {
   fetch?: FetchLike;
   storage?: 'local' | 'session' | WebStorageLike;
@@ -206,5 +233,6 @@ export function createRealSet(options: RealSetOptions = {}): OutsideSet {
     storage: createRealStorage(options.storage),
     config: createRealConfig(options.config),
     idGen: createRealIdGen(),
+    random: createRealRandom(),
   };
 }

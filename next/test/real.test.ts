@@ -7,6 +7,7 @@ import {
   createRealConfig,
   createRealHttp,
   createRealIdGen,
+  createRealRandom,
   createRealSet,
   createRealStorage,
   type FetchLike,
@@ -138,6 +139,54 @@ describe('REQ-OUT-REAL-TESTED-HERE real の IdGen', () => {
   });
 });
 
+describe('REQ-OUT-REAL-TESTED-HERE real の Random', () => {
+  it('使う時に global の crypto を取り getRandomValues を crypto の method として呼ぶ', () => {
+    const random = createRealRandom();
+    const stub = {
+      fill: 7,
+      getRandomValues(this: { fill: number }, array: Uint8Array) {
+        array.fill(this.fill);
+        return array;
+      },
+    };
+    vi.stubGlobal('crypto', stub);
+    expect(Array.from(random.read(new Uint8Array(3)))).toEqual([7, 7, 7]);
+  });
+
+  it('65536 byte より長い buf は 65536 byte までに分けて 全部埋める', () => {
+    const random = createRealRandom();
+    const lengths: number[] = [];
+    let next = 1;
+    vi.stubGlobal('crypto', {
+      getRandomValues(array: Uint8Array) {
+        if (array.length > 65536) throw new Error('QuotaExceededError');
+        lengths.push(array.length);
+        array.fill(next);
+        next += 1;
+        return array;
+      },
+    });
+    const buf = random.read(new Uint8Array(65536 * 2 + 10));
+    expect(lengths).toEqual([65536, 65536, 10]);
+    expect(buf[0]).toBe(1);
+    expect(buf[65536]).toBe(2);
+    expect(buf[65536 * 2 + 9]).toBe(3);
+  });
+
+  it('実の getRandomValues で 65536 byte より長い buf を埋める', () => {
+    const buf = createRealRandom().read(new Uint8Array(65536 + 64));
+    expect(buf.subarray(65536).some((b) => b !== 0)).toBe(true);
+  });
+
+  it('crypto か getRandomValues が無い環境では 無い物を名乗って throw する', () => {
+    const random = createRealRandom();
+    vi.stubGlobal('crypto', undefined);
+    expect(() => random.read(new Uint8Array(1))).toThrow('crypto is not available');
+    vi.stubGlobal('crypto', {});
+    expect(() => random.read(new Uint8Array(1))).toThrow('crypto.getRandomValues is not available');
+  });
+});
+
 describe('REQ-OUT-INJECT real の set', () => {
   it('作るだけでは 外を触らない', () => {
     vi.stubGlobal('fetch', undefined);
@@ -145,6 +194,6 @@ describe('REQ-OUT-INJECT real の set', () => {
     vi.stubGlobal('process', undefined);
     vi.stubGlobal('crypto', undefined);
     const set = createRealSet();
-    expect(Object.keys(set).sort()).toEqual(['clock', 'config', 'http', 'idGen', 'storage']);
+    expect(Object.keys(set).sort()).toEqual(['clock', 'config', 'http', 'idGen', 'random', 'storage']);
   });
 });

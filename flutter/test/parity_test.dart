@@ -20,6 +20,7 @@ void main() {
         'Storage': _methods(Storage),
         'Config': _methods(Config),
         'IdGen': _methods(IdGen),
+        'Random': _methods(Random),
       },
       {
         'Clock': {'now', 'setTimeout', 'clearTimeout'},
@@ -27,6 +28,7 @@ void main() {
         'Storage': {'get', 'set', 'remove'},
         'Config': {'get'},
         'IdGen': {'newId'},
+        'Random': {'read'},
       },
     );
   });

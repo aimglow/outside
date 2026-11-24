@@ -1,6 +1,9 @@
 /// 口ごとの mock。test が渡した値だけで振る舞いが決まる。
 library;
 
+import 'dart:convert' show utf8;
+import 'dart:typed_data' show Uint8List;
+
 import 'outside.dart';
 
 /// 決めた時刻から始まり [advance] でだけ進む Clock。
@@ -158,5 +161,63 @@ final class MockIdGen implements IdGen {
   String newId() {
     _calls++;
     return 'id-${_calls.toString().padLeft(4, '0')}';
+  }
+}
+
+/// 種で決まる byte 列を返す Random。同じ種・同じ呼び順なら 同じ byte。
+///
+/// 列 = 種の byte 列の FNV-1a 64bit を初期値とする splitmix64 の出力を 1 つずつ 8 byte (little endian) に開いて並べた物
+/// (next・angular の createMockRandom と同じ列)。1 本の byte の流れとして持つので 分けて読んでも 続けて読んでも 同じ列。
+/// 64bit の整数の演算 (2 の 64 乗で回る) を使うため native (iOS・Android・機体の dart) で動かす。
+final class MockRandom implements Random {
+  /// seed の byte 列 (各要素の下 8bit) を種にする。
+  MockRandom(List<int> seed) : _state = _fnv1a64(seed);
+
+  /// 文字列の種。UTF-8 の byte 列を種にする。
+  MockRandom.text(String seed) : this(utf8.encode(seed));
+
+  int _state;
+  final Uint8List _block = Uint8List(8);
+  int _pos = 8;
+  Object? _err;
+
+  /// read に渡された buf の長さ (読んだ順)。
+  final List<int> calls = [];
+
+  static int _fnv1a64(List<int> bytes) {
+    var h = 0xcbf29ce484222325;
+    for (final b in bytes) {
+      h = (h ^ (b & 0xff)) * 0x100000001b3;
+    }
+    return h;
+  }
+
+  void _nextBlock() {
+    _state += 0x9e3779b97f4a7c15;
+    var z = _state;
+    z = (z ^ (z >>> 30)) * 0xbf58476d1ce4e5b9;
+    z = (z ^ (z >>> 27)) * 0x94d049bb133111eb;
+    z ^= z >>> 31;
+    for (var i = 0; i < 8; i++) {
+      _block[i] = (z >>> (8 * i)) & 0xff;
+    }
+    _pos = 0;
+  }
+
+  /// 以後の read が err を投げるようにする。null を渡すと 列を返す形に戻す。
+  MockRandom withErr(Object? err) {
+    _err = err;
+    return this;
+  }
+
+  @override
+  void read(Uint8List buf) {
+    calls.add(buf.length);
+    final err = _err;
+    if (err != null) throw err;
+    for (var i = 0; i < buf.length; i++) {
+      if (_pos == 8) _nextBlock();
+      buf[i] = _block[_pos++];
+    }
   }
 }

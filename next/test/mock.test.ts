@@ -6,8 +6,10 @@ import {
   createMockConfig,
   createMockHttp,
   createMockIdGen,
+  createMockRandom,
   createMockSet,
   createMockStorage,
+  DEFAULT_MOCK_RANDOM_SEED,
 } from '../src/mock/index';
 
 const START = Date.UTC(2026, 0, 2, 3, 4, 5);
@@ -198,17 +200,85 @@ describe('TC-OUT-IDGEN-MOCK mock の IdGen', () => {
   });
 });
 
+describe('TC-OUT-RANDOM-FE mock の Random', () => {
+  const read = (random: ReturnType<typeof createMockRandom>, n: number): number[] =>
+    Array.from(random.read(new Uint8Array(n)));
+
+  it('同じ種・同じ呼び順なら 同じ byte', () => {
+    const a = createMockRandom('seed-a');
+    const b = createMockRandom('seed-a');
+    expect([read(a, 16), read(a, 8)]).toEqual([read(b, 16), read(b, 8)]);
+    const bytes = new Uint8Array([1, 2, 3]);
+    expect(read(createMockRandom(bytes), 16)).toEqual(read(createMockRandom(new Uint8Array([1, 2, 3])), 16));
+  });
+
+  it('文字列の種は その UTF-8 の byte 列の種と同じ列', () => {
+    expect(read(createMockRandom('種'), 16)).toEqual(
+      read(createMockRandom(new TextEncoder().encode('種')), 16),
+    );
+  });
+
+  it('違う種は 違う byte', () => {
+    expect(read(createMockRandom('seed-a'), 24)).not.toEqual(read(createMockRandom('seed-b'), 24));
+    expect(read(createMockRandom(''), 24)).not.toEqual(read(createMockRandom(new Uint8Array([0])), 24));
+  });
+
+  it('分けて読んでも 続けて読んでも 同じ列', () => {
+    const whole = read(createMockRandom('stream'), 24);
+    const split = createMockRandom('stream');
+    expect([...read(split, 16), ...read(split, 8)]).toEqual(whole);
+    const odd = createMockRandom('stream');
+    expect([...read(odd, 3), ...read(odd, 0), ...read(odd, 5), ...read(odd, 16)]).toEqual(whole);
+  });
+
+  it('列は FNV-1a 64bit の種から始まる splitmix64 (dart の MockRandom と同じ列)', () => {
+    expect(read(createMockRandom('outside'), 12)).toEqual([23, 1, 114, 187, 19, 129, 210, 158, 59, 154, 56, 168]);
+    expect(read(createMockRandom(''), 4)).toEqual([48, 255, 164, 107]);
+  });
+
+  it('読んだ長さを 読んだ順に記録する', () => {
+    const random = createMockRandom('calls');
+    random.read(new Uint8Array(16));
+    random.read(new Uint8Array(8));
+    random.read(new Uint8Array(0));
+    expect(random.calls).toEqual([16, 8, 0]);
+  });
+
+  it('withErr の後は その誤りを投げ 記録は残す。withErr(undefined) で 列の続きに戻る', () => {
+    const whole = read(createMockRandom('err'), 16);
+    const random = createMockRandom('err');
+    const first = read(random, 8);
+    const err = new Error('entropy exhausted');
+    expect(random.withErr(err)).toBe(random);
+    expect(() => random.read(new Uint8Array(4))).toThrow(err);
+    expect(random.withErr(undefined)).toBe(random);
+    expect([...first, ...read(random, 8)]).toEqual(whole);
+    expect(random.calls).toEqual([8, 4, 8]);
+  });
+});
+
 describe('REQ-OUT-MOCK mock の set', () => {
-  it('渡した値から 5 つの mock を作る', async () => {
+  it('渡した値から 6 つの mock を作る', async () => {
     const set = createMockSet({
       startMs: START,
       routes: [{ method: 'GET', url: 'https://api.example.test/', response: { status: 204 } }],
       config: { MODE: 'test' },
+      seed: 'set-seed',
     });
     expect(set.clock.now()).toBe(START);
     expect((await set.http.request({ method: 'GET', url: 'https://api.example.test/' })).status).toBe(204);
     expect(set.storage.get('k')).toBeNull();
     expect(set.config.get('MODE')).toBe('test');
     expect(set.idGen.newId()).toBe('id-0001');
+    expect(Array.from(set.random.read(new Uint8Array(8)))).toEqual(
+      Array.from(createMockRandom('set-seed').read(new Uint8Array(8))),
+    );
+  });
+
+  it('種を渡さなければ DEFAULT_MOCK_RANDOM_SEED の列', () => {
+    const set = createMockSet({ startMs: START });
+    expect(Array.from(set.random.read(new Uint8Array(8)))).toEqual(
+      Array.from(createMockRandom(DEFAULT_MOCK_RANDOM_SEED).read(new Uint8Array(8))),
+    );
   });
 });

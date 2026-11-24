@@ -1,7 +1,7 @@
 // 口ごとの契約。real と mock の両方に 同じ関数を掛ける。
 
 import { describe, expect, it } from 'vitest';
-import type { Clock, Config, Http, IdGen, Storage } from '../src/index';
+import type { Clock, Config, Http, IdGen, Random, Storage } from '../src/index';
 
 export interface ClockUnderTest {
   clock: Clock;
@@ -205,6 +205,36 @@ export function idGenContract(label: string, make: () => IdGen): void {
         expect(id.length).toBeGreaterThan(0);
       }
       expect(new Set(ids).size).toBe(ids.length);
+    });
+  });
+}
+
+export function randomContract(label: string, make: () => Random): void {
+  describe(`TC-OUT-RANDOM-FE Random (${label})`, () => {
+    it('渡した buf を埋めて 同じ buf を返す。続けて読んだ 16 byte は 互いに違う', () => {
+      const random = make();
+      const first = new Uint8Array(16);
+      const second = new Uint8Array(8);
+      const third = new Uint8Array(16);
+      expect(random.read(first)).toBe(first);
+      expect(random.read(second)).toBe(second);
+      expect(random.read(third)).toBe(third);
+      expect(first.some((b) => b !== 0)).toBe(true);
+      expect(second.some((b) => b !== 0)).toBe(true);
+      expect(Array.from(first)).not.toEqual(Array.from(third));
+    });
+
+    it('長さ 0 の buf は そのまま返す', () => {
+      const empty = new Uint8Array(0);
+      expect(make().read(empty)).toBe(empty);
+    });
+
+    it('buf の一部 (subarray) を渡すと その範囲だけを埋める', () => {
+      const whole = new Uint8Array(48);
+      make().read(whole.subarray(16, 32));
+      expect(Array.from(whole.subarray(0, 16)).every((b) => b === 0)).toBe(true);
+      expect(Array.from(whole.subarray(32)).every((b) => b === 0)).toBe(true);
+      expect(whole.subarray(16, 32).some((b) => b !== 0)).toBe(true);
     });
   });
 }

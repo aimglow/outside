@@ -1,6 +1,7 @@
 // 本物だけが持つ振る舞い。test が渡した物だけを触る。
 import 'dart:async';
 import 'dart:io' as io;
+import 'dart:typed_data';
 
 import 'package:outside/outside.dart';
 import 'package:test/test.dart';
@@ -69,25 +70,35 @@ void main() {
     final clock = RealClock();
     final config = RealConfig(runtime: const {});
     final idGen = RealIdGen();
+    final random = RealRandom();
     final set = OutsideSet(
       clock: clock,
       http: RealHttp(),
       storage: RealStorage(_NoBackend()),
       config: config,
       idGen: idGen,
+      random: random,
     );
     expect(set.clock, same(clock));
     expect(set.config, same(config));
     expect(set.idGen, same(idGen));
+    expect(set.random, same(random));
   });
 
-  test('REQ-OUT-INJECT OutsideSet.real は 5 つの本物の口を作る', () {
+  test('REQ-OUT-INJECT OutsideSet.real は 6 つの本物の口を作る', () {
     final set = OutsideSet.real(storageBackend: _NoBackend());
     expect(set.clock, isA<RealClock>());
     expect(set.http, isA<RealHttp>());
     expect(set.storage, isA<RealStorage>());
     expect(set.config, isA<RealConfig>());
     expect(set.idGen, isA<RealIdGen>());
+    expect(set.random, isA<RealRandom>());
+  });
+
+  test('REQ-OUT-REAL-TESTED-HERE RealRandom は 長い buf も 終わりまで埋める', () {
+    final buf = Uint8List(65536 + 64);
+    RealRandom().read(buf);
+    expect(Uint8List.sublistView(buf, 65536).any((b) => b != 0), isTrue);
   });
 
   test('REQ-OUT-REAL-TESTED-HERE RealIdGen は UUID v4 の形の ID を返す', () {

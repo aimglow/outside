@@ -1,4 +1,6 @@
 // 口ごとの契約。本物と mock の両方に 同じ関数を掛ける。
+import 'dart:typed_data';
+
 import 'package:outside/outside.dart';
 import 'package:test/test.dart';
 
@@ -200,6 +202,36 @@ void idGenContract(String name, IdGen Function() create) {
         expect(id, isNotEmpty);
       }
       expect(ids.toSet(), hasLength(ids.length));
+    });
+  });
+}
+
+/// Random の契約。create は 新しい Random を返す。
+void randomContract(String name, Random Function() create) {
+  group('TC-OUT-RANDOM-FE Random ($name)', () {
+    test('渡した buf を埋める。続けて読んだ 16 byte は 互いに違う', () {
+      final random = create();
+      final first = Uint8List(16);
+      final second = Uint8List(8);
+      final third = Uint8List(16);
+      random.read(first);
+      random.read(second);
+      random.read(third);
+      expect(first.any((b) => b != 0), isTrue);
+      expect(second.any((b) => b != 0), isTrue);
+      expect(first, isNot(equals(third)));
+    });
+
+    test('長さ 0 の buf は 何もしない', () {
+      expect(() => create().read(Uint8List(0)), returnsNormally);
+    });
+
+    test('buf の一部 (sublistView) を渡すと その範囲だけを埋める', () {
+      final whole = Uint8List(48);
+      create().read(Uint8List.sublistView(whole, 16, 32));
+      expect(whole.sublist(0, 16).every((b) => b == 0), isTrue);
+      expect(whole.sublist(32).every((b) => b == 0), isTrue);
+      expect(whole.sublist(16, 32).any((b) => b != 0), isTrue);
     });
   });
 }
