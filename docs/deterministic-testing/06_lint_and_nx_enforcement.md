@@ -6,11 +6,11 @@ AI エージェントに規約を守らせる最大の鍵は、プロンプト�
 
 ## 1. Nx モジュール境界の強制（`@nx/enforce-module-boundaries`）
 
-各プロジェクトの `project.json` に以下のタグを付与します。
+各プロジェクトの `project.json` に 層の tag（名前空間 `layer:`）を付与します。project が既に使っている `scope:` 等の軸とは別の名前空間にし 混ぜない。
 
-- `libs/outside/*`: `["scope:outside"]`
-- `libs/platform/*`: `["scope:adapter"]`
-- `apps/*`: `["scope:app"]`
+- `libs/outside/*`: `["layer:outside"]`
+- `libs/platform/*`: `["layer:adapter"]`
+- `apps/*`: `["layer:app"]`
 
 ワークスペースルートの `eslint.config.js` で依存方向をロックします。
 
@@ -27,18 +27,18 @@ AI エージェントに規約を守らせる最大の鍵は、プロンプト�
         depConstraints: [
           {
             // outside は他への依存を一切持たない（純粋なリーフ基盤）
-            sourceTag: 'scope:outside',
-            onlyDependOnLibsWithTags: ['scope:outside'],
+            sourceTag: 'layer:outside',
+            onlyDependOnLibsWithTags: ['layer:outside'],
           },
           {
             // adapter は outside と他の adapter にのみ依存可能
-            sourceTag: 'scope:adapter',
-            onlyDependOnLibsWithTags: ['scope:outside', 'scope:adapter'],
+            sourceTag: 'layer:adapter',
+            onlyDependOnLibsWithTags: ['layer:outside', 'layer:adapter'],
           },
           {
             // app は adapter と outside に依存可能
-            sourceTag: 'scope:app',
-            onlyDependOnLibsWithTags: ['scope:outside', 'scope:adapter', 'scope:app'],
+            sourceTag: 'layer:app',
+            onlyDependOnLibsWithTags: ['layer:outside', 'layer:adapter', 'layer:app'],
           },
         ],
       },
