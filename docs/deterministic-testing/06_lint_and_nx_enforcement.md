@@ -143,8 +143,8 @@ linters-settings:
 
 issues:
   exclude-rules:
-    # outside 基盤と、アダプタの本番実装(*_real.go)および main.go のみ許可
-    - path: ^(libs/outside/go/|.*/adapters/.*_real\.go$|.*/cmd/.*/main\.go$)
+    # outside 基盤と、adapters 層の本番実装 (libs/platform/*/adapter_real.go) と 入口の main.go (apps/*・tools/*) のみ許可
+    - path: ^(libs/outside/go/|libs/platform/[^/]+/adapter_real\.go$|apps/[^/]+/main\.go$|tools/[^/]+/main\.go$)
       linters:
         - forbidigo
 ```

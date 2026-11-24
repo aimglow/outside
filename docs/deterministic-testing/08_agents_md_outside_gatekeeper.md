@@ -24,7 +24,7 @@
 2. **業務ドメイン用語・Cookie・認証仕様の禁止:**
    - `User`, `Session`, `Order`, `Ledger`, `Cookie`, `Token` といった業務・プロトコル概念を含む型・メソッド・定数を書いてはならない。
 3. **対象ランタイム外のフレームワーク依存禁止:**
-   - **`go/`:** 標準ライブラリおよび `github.com/spf13/afero` 以外の外部パッケージを追加してはならない。
+   - **`go/`:** 標準ライブラリおよび `github.com/BurntSushi/toml`（`outside.toml` の読み取り）以外の外部パッケージを追加してはならない。
    - **`next/`:** `node:*` 標準モジュールおよび `memfs` 以外の依存（特に **`next`, `react`, `@angular/*`**）を持ち込んではならない。
    - **`angular/`:** ブラウザ標準 Web API 型（`Storage`, `Location` 等）のみに依存し、**`@angular/core` や Node.js 固有モジュール（`node:fs` 等）** を持ち込んではならない。
    - **`flutter/`:** `dart:*` および `package:file`, `package:clock` 以外の依存（特に **`package:flutter` やネイティブプラグイン類**）を絶対に `import` してはならない。Pure Dart を維持すること。

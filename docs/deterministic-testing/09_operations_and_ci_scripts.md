@@ -192,4 +192,4 @@ fi
 2. **`outside` 専用セッション（門番）:**
    `08_agents_md_outside_gatekeeper.md` に照らし合わせて審査 → `Real` + `Mock` + 両面テストを実装 → `./scripts/release.sh` を実行 → 発行されたタグ名（例: `v0.2.0`）を返却。
 3. **本体セッション（再開）:**
-   `./scripts/sync-outside.sh all v0.2.0` を実行 → Nx キャッシュが更新されたクリーンな状態で実装・Unit テストを再開 → `npx nx affected -t lint,test` で完了検証。
+   `./scripts/sync-outside.sh all v0.2.0` を実行 → Nx キャッシュが更新されたクリーンな状態で実装・Unit テストを再開 → `ccark prepush-gate` で完了検証。

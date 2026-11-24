@@ -14,6 +14,8 @@
 
 ## 2. `libs/outside/go`（Go ランタイム）
 
+> **実物の名前（正）:** 口の組は `Set`（`Clock`・`Env`・`FS`・`Proc`・`Workdir`・`SysInfo`・`IdGen`）、mock は package `outsidemock`、入口は `RunTool`（ツールの dir の `outside.toml` で 使う環境を宣言する）。下のコードは 考え方の参照で、名前は実物に従う。特定ツール名を持つ口（`Git` 等）は `outside` に置かず adapters 層（`libs/platform/vcs-git-go` 等）に置く。依存に許すのは 標準ライブラリと `github.com/BurntSushi/toml`（`outside.toml` の読み取り）だけ。
+
 AI開発基盤（Session Relay・台帳・監視 Daemon）を完全に決定論化するため、`afero.Fs` に加えて **タイマー進行（`Advance`）付き仮想時計**・**決定論的 `IdGen`**・**固定 `SysInfo`** を備えます。
 
 ```go
