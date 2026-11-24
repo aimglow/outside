@@ -1,19 +1,20 @@
-/// 外 (時計・通信・保存・設定) を触る口と 本物の実装。
+/// 外 (時計・通信・保存・設定・ID) を触る口と 本物の実装。
 ///
 /// 設計書の ports.frontend_and_mobile との対応 (名前は設計書と同じ):
 /// - Clock: now / setTimeout / clearTimeout
 /// - Http: request
 /// - Storage: get / set / remove (端末の保存は非同期ゆえ Future を返す)
 /// - Config: get
+/// - IdGen: newId
 ///
-/// 実の時計・timer・環境変数・通信を呼ぶのは この library の Real* だけ。
+/// 実の時計・timer・環境変数・通信・乱数を呼ぶのは この library の Real* だけ。
+/// 依存は dart:* だけ (package:flutter も plugin も使わない)。
 library;
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
-
-import 'package:http/http.dart' as http;
+import 'dart:io' show HttpClient, IOException, Platform;
+import 'dart:math' show Random;
 
 /// setTimeout が返す札。clearTimeout に渡す。
 final class TimeoutHandle {
@@ -120,6 +121,12 @@ abstract interface class Config {
   String? get(String name);
 }
 
+/// 新しい ID を返す。
+abstract interface class IdGen {
+  /// 呼ぶたびに 違う ID を返す。空の文字列は返さない。
+  String newId();
+}
+
 /// 1 つの処理に渡す口の組。
 final class OutsideSet {
   const OutsideSet({
@@ -127,6 +134,7 @@ final class OutsideSet {
     required this.http,
     required this.storage,
     required this.config,
+    required this.idGen,
   });
 
   /// 本物の口の組を作る。保存の実体と build 時の設定の表は app が渡す。
@@ -138,12 +146,14 @@ final class OutsideSet {
     http: RealHttp(),
     storage: RealStorage(storageBackend),
     config: RealConfig(buildTime: buildTimeConfig),
+    idGen: RealIdGen(),
   );
 
   final Clock clock;
   final Http http;
   final Storage storage;
   final Config config;
+  final IdGen idGen;
 }
 
 /// 実の時計と実の timer を使う Clock。
@@ -170,26 +180,34 @@ final class RealClock implements Clock {
   }
 }
 
-/// package:http の client で送る Http。client を渡さなければ 既定の client を使う。
+/// dart:io の HttpClient で送る Http。
+///
+/// client を渡さなければ 最初の request の時に 既定の HttpClient を作る (作るだけでは 何も触らない)。
+/// 同じ名前の header が複数届いた時は ', ' で繋いで 1 つの値にする。
 final class RealHttp implements Http {
-  RealHttp({http.Client? client}) : _client = client ?? http.Client();
+  RealHttp({HttpClient? client}) : _client = client;
 
-  final http.Client _client;
+  HttpClient? _client;
 
   @override
   Future<HttpResponse> request(HttpRequest request) async {
-    final req = http.Request(request.method, request.url)
-      ..headers.addAll(request.headers)
-      ..bodyBytes = request.bodyBytes;
+    final client = _client ??= HttpClient();
     try {
-      final res = await http.Response.fromStream(await _client.send(req));
-      return HttpResponse(
-        res.statusCode,
-        headers: res.headers,
-        bodyBytes: res.bodyBytes,
+      final req = await client.openUrl(request.method, request.url);
+      request.headers.forEach(req.headers.set);
+      req.contentLength = request.bodyBytes.length;
+      req.add(request.bodyBytes);
+      final res = await req.close();
+      final headers = <String, String>{};
+      res.headers.forEach((name, values) => headers[name] = values.join(', '));
+      final body = await res.fold<List<int>>(
+        <int>[],
+        (bytes, chunk) => bytes..addAll(chunk),
       );
-    } on http.ClientException catch (e) {
-      throw HttpFailure(e.message);
+      return HttpResponse(res.statusCode, headers: headers, bodyBytes: body);
+    } on IOException catch (e) {
+      // 接続できない・応答の途中で切れた・TLS の誤り。status の付いた応答は ここに来ない。
+      throw HttpFailure(e.toString());
     }
   }
 }
@@ -234,4 +252,23 @@ final class RealConfig implements Config {
   @override
   String? get(String name) =>
       (_runtime ?? Platform.environment)[name] ?? _buildTime[name];
+}
+
+/// 安全な乱数 (Random.secure) で UUID v4 の形の ID を返す IdGen。
+final class RealIdGen implements IdGen {
+  RealIdGen() : _random = Random.secure();
+
+  final Random _random;
+
+  @override
+  String newId() {
+    final bytes = List<int>.generate(16, (_) => _random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; // 版 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80; // 変種 RFC 4122
+    final hex = [
+      for (final b in bytes) b.toRadixString(16).padLeft(2, '0'),
+    ].join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-'
+        '${hex.substring(16, 20)}-${hex.substring(20)}';
+  }
 }

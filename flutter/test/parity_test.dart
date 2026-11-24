@@ -19,12 +19,14 @@ void main() {
         'Http': _methods(Http),
         'Storage': _methods(Storage),
         'Config': _methods(Config),
+        'IdGen': _methods(IdGen),
       },
       {
         'Clock': {'now', 'setTimeout', 'clearTimeout'},
         'Http': {'request'},
         'Storage': {'get', 'set', 'remove'},
         'Config': {'get'},
+        'IdGen': {'newId'},
       },
     );
   });

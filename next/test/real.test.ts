@@ -6,6 +6,7 @@ import {
   createRealClock,
   createRealConfig,
   createRealHttp,
+  createRealIdGen,
   createRealSet,
   createRealStorage,
   type FetchLike,
@@ -108,12 +109,42 @@ describe('REQ-OUT-REAL-TESTED-HERE real の Clock', () => {
   });
 });
 
+describe('REQ-OUT-REAL-TESTED-HERE real の IdGen', () => {
+  const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+  it('UUID v4 の形の ID を返す', () => {
+    const idGen = createRealIdGen();
+    for (let i = 0; i < 20; i += 1) expect(idGen.newId()).toMatch(UUID_V4);
+  });
+
+  it('使う時に global の crypto を取り randomUUID を crypto の method として呼ぶ', () => {
+    const idGen = createRealIdGen();
+    const stub = {
+      label: 'stub',
+      randomUUID(this: { label: string }) {
+        return `${this.label}-uuid`;
+      },
+    };
+    vi.stubGlobal('crypto', stub);
+    expect(idGen.newId()).toBe('stub-uuid');
+  });
+
+  it('crypto か randomUUID が無い環境では 無い物を名乗って throw する', () => {
+    const idGen = createRealIdGen();
+    vi.stubGlobal('crypto', undefined);
+    expect(() => idGen.newId()).toThrow('crypto is not available');
+    vi.stubGlobal('crypto', {});
+    expect(() => idGen.newId()).toThrow('crypto.randomUUID is not available');
+  });
+});
+
 describe('REQ-OUT-INJECT real の set', () => {
   it('作るだけでは 外を触らない', () => {
     vi.stubGlobal('fetch', undefined);
     vi.stubGlobal('localStorage', undefined);
     vi.stubGlobal('process', undefined);
+    vi.stubGlobal('crypto', undefined);
     const set = createRealSet();
-    expect(Object.keys(set).sort()).toEqual(['clock', 'config', 'http', 'storage']);
+    expect(Object.keys(set).sort()).toEqual(['clock', 'config', 'http', 'idGen', 'storage']);
   });
 });

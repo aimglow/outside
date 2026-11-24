@@ -1,10 +1,10 @@
-// 契約を 本物と mock の両方に掛ける。本物は test が渡した物だけを触る。
+// 契約を 本物と mock の両方に掛ける。本物は test が作った物 (loopback の HttpServer 等) だけを触る。
 import 'dart:async';
+import 'dart:io' as io;
 
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:outside/mock.dart';
 import 'package:outside/outside.dart';
+import 'package:test/test.dart';
 
 import 'contract.dart';
 
@@ -22,24 +22,48 @@ class _MemoryBackend implements StorageBackend {
   Future<void> remove(String key) async => _values.remove(key);
 }
 
-/// 決めに従って答え 届いた内容を sent に積む client。通信はしない。
-http.Client _clientFor(HttpSetup setup, List<HttpRequest> sent) => MockClient((
-  req,
-) async {
-  sent.add(
-    HttpRequest(
-      req.method,
-      req.url,
-      headers: req.headers,
-      bodyBytes: req.bodyBytes,
-    ),
-  );
-  final key = '${req.method} ${req.url}';
-  final failure = setup.failures[key];
-  if (failure != null) throw http.ClientException(failure, req.url);
-  final res = setup.responses[key]!;
-  return http.Response.bytes(res.bodyBytes, res.status, headers: res.headers);
-});
+/// 決めに従って答える loopback の server を起こし RealHttp を向ける。
+/// 届いた内容を sent に積む。failures の宛先は 応答を返さずに接続を切る。
+Future<HttpUnderTest> _realHttp(HttpSetup setup) async {
+  final server = await io.HttpServer.bind(io.InternetAddress.loopbackIPv4, 0);
+  final client = io.HttpClient();
+  addTearDown(() async {
+    client.close(force: true);
+    await server.close(force: true);
+  });
+  final base = Uri.parse('http://${server.address.address}:${server.port}/');
+  final sent = <HttpRequest>[];
+  server.listen((req) async {
+    final headers = <String, String>{};
+    req.headers.forEach((name, values) => headers[name] = values.join(', '));
+    final body = await req.fold<List<int>>(<int>[], (b, c) => b..addAll(c));
+    sent.add(
+      HttpRequest(
+        req.method,
+        base.resolve(req.uri.toString()),
+        headers: headers,
+        bodyBytes: body,
+      ),
+    );
+    final key = '${req.method} ${req.uri}';
+    if (setup.failures.contains(key)) {
+      final socket = await req.response.detachSocket(writeHeaders: false);
+      socket.destroy();
+      return;
+    }
+    final res = setup.responses[key];
+    if (res == null) {
+      req.response.statusCode = 599;
+      await req.response.close();
+      return;
+    }
+    req.response.statusCode = res.status;
+    res.headers.forEach(req.response.headers.set);
+    req.response.add(res.bodyBytes);
+    await req.response.close();
+  });
+  return (http: RealHttp(client: client), base: base, sent: () => sent);
+}
 
 void main() {
   clockContract('real', () {
@@ -52,29 +76,27 @@ void main() {
     return (clock: clock, elapse: () async => clock.advance(Duration.zero));
   });
 
-  httpContract('real', (setup) {
-    final sent = <HttpRequest>[];
-    return (http: RealHttp(client: _clientFor(setup, sent)), sent: () => sent);
-  });
-  httpContract('mock', (setup) {
+  httpContract('real', _realHttp);
+  httpContract('mock', (setup) async {
+    final base = Uri.parse('https://example.test/');
     final mock = MockHttp();
     for (final e in setup.responses.entries) {
       final i = e.key.indexOf(' ');
       mock.respond(
         e.key.substring(0, i),
-        Uri.parse(e.key.substring(i + 1)),
+        base.resolve(e.key.substring(i + 1)),
         e.value,
       );
     }
-    for (final e in setup.failures.entries) {
-      final i = e.key.indexOf(' ');
+    for (final key in setup.failures) {
+      final i = key.indexOf(' ');
       mock.fail(
-        e.key.substring(0, i),
-        Uri.parse(e.key.substring(i + 1)),
-        e.value,
+        key.substring(0, i),
+        base.resolve(key.substring(i + 1)),
+        'refused',
       );
     }
-    return (http: mock, sent: () => mock.requests);
+    return (http: mock, base: base, sent: () => mock.requests);
   });
 
   storageContract('real', () => RealStorage(_MemoryBackend()));
@@ -86,4 +108,7 @@ void main() {
   );
   configContract('real・実行時の表', (table) => RealConfig(runtime: table));
   configContract('mock', MockConfig.new);
+
+  idGenContract('real', RealIdGen.new);
+  idGenContract('mock', MockIdGen.new);
 }

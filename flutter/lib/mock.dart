@@ -146,3 +146,17 @@ final class MockConfig implements Config {
     return _table[name];
   }
 }
+
+/// 'id-0001'・'id-0002' … と 呼んだ順に決まった ID を返す IdGen。作るたびに 1 から始まる。
+final class MockIdGen implements IdGen {
+  int _calls = 0;
+
+  /// newId が呼ばれた回数。
+  int get calls => _calls;
+
+  @override
+  String newId() {
+    _calls++;
+    return 'id-${_calls.toString().padLeft(4, '0')}';
+  }
+}

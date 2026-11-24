@@ -5,6 +5,7 @@ import {
   createRealClock,
   createRealConfig,
   createRealHttp,
+  createRealIdGen,
   createRealStorage,
   type FetchLike,
   type WebStorageLike,
@@ -13,6 +14,7 @@ import {
   createMockClock,
   createMockConfig,
   createMockHttp,
+  createMockIdGen,
   createMockStorage,
   type MockHttpRoute,
 } from '../src/mock/index';
@@ -20,6 +22,7 @@ import {
   clockContract,
   configContract,
   httpContract,
+  idGenContract,
   storageContract,
   type ContractRoute,
 } from './contract';
@@ -90,3 +93,7 @@ storageContract('mock', () => createMockStorage());
 configContract('real (env の表)', (table) => createRealConfig({ env: table }));
 configContract('real (values の表)', (table) => createRealConfig({ values: table, env: {} }));
 configContract('mock', (table) => createMockConfig(table));
+
+// real の IdGen: 実行環境の crypto.randomUUID を使う (乱数は 外から何も読まない)。
+idGenContract('real', () => createRealIdGen());
+idGenContract('mock', () => createMockIdGen());

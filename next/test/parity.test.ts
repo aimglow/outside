@@ -10,6 +10,7 @@ const DESIGN_PORTS: Record<string, string[]> = {
   http: ['request'],
   storage: ['get', 'set', 'remove'],
   config: ['get'],
+  idGen: ['newId'],
 };
 
 // port が持つ関数の名前の一覧。

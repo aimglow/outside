@@ -1,13 +1,13 @@
 name: outside
-description: 外 (時計・通信・保存・設定) を触る口の共通部品。
+description: 外 (時計・通信・保存・設定・ID) を触る口の共通部品 (iOS と Android 向け、dart:* だけに依存する)。
 version: 0.1.0
 publish_to: none
 
 environment:
   sdk: ^3.9.0
 
-dependencies:
-  http: ^1.2.0
+# runtime の依存は持たない (REQ-OUT-RUNTIME-DEPS = dart:* だけ)。
+dependencies: {}
 
 dev_dependencies:
   lints: ^6.0.0

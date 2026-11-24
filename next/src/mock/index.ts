@@ -7,6 +7,7 @@ import type {
   Config,
   Http,
   HttpRequest,
+  IdGen,
   HttpResponse,
   OutsideSet,
   Storage,
@@ -174,11 +175,31 @@ export function createMockConfig(table: Readonly<Record<string, string>> = {}): 
   };
 }
 
+export interface MockIdGen extends IdGen {
+  /** newId が呼ばれた回数。 */
+  readonly calls: number;
+}
+
+/** 'id-0001'・'id-0002' … と 呼んだ順に決まった ID を返す IdGen。作るたびに 1 から始まる。 */
+export function createMockIdGen(): MockIdGen {
+  let count = 0;
+  return {
+    get calls() {
+      return count;
+    },
+    newId() {
+      count += 1;
+      return `id-${String(count).padStart(4, '0')}`;
+    },
+  };
+}
+
 export interface MockSet extends OutsideSet {
   clock: MockClock;
   http: MockHttp;
   storage: MockStorage;
   config: MockConfig;
+  idGen: MockIdGen;
 }
 
 export interface MockSetOptions {
@@ -195,5 +216,6 @@ export function createMockSet(options: MockSetOptions): MockSet {
     http: createMockHttp(options.routes),
     storage: createMockStorage(),
     config: createMockConfig(options.config),
+    idGen: createMockIdGen(),
   };
 }

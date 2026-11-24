@@ -1,7 +1,7 @@
 // 口ごとの契約。real と mock の両方に 同じ関数を掛ける。
 
 import { describe, expect, it } from 'vitest';
-import type { Clock, Config, Http, Storage } from '../src/index';
+import type { Clock, Config, Http, IdGen, Storage } from '../src/index';
 
 export interface ClockUnderTest {
   clock: Clock;
@@ -191,6 +191,20 @@ export function configContract(
       expect(config.get('toString')).toBeUndefined();
       expect(config.get('constructor')).toBeUndefined();
       expect(config.get('__proto__')).toBeUndefined();
+    });
+  });
+}
+
+export function idGenContract(label: string, make: () => IdGen): void {
+  describe(`TC-OUT-CONTRACT IdGen (${label})`, () => {
+    it('続けて呼んだ ID は 互いに違い 空でない', () => {
+      const idGen = make();
+      const ids = Array.from({ length: 100 }, () => idGen.newId());
+      for (const id of ids) {
+        expect(typeof id).toBe('string');
+        expect(id.length).toBeGreaterThan(0);
+      }
+      expect(new Set(ids).size).toBe(ids.length);
     });
   });
 }

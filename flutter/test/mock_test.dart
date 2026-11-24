@@ -134,4 +134,25 @@ void main() {
       expect(MockConfig().get('API_URL'), isNull);
     });
   });
+
+  group('TC-OUT-IDGEN-MOCK', () {
+    test('id-0001 から 呼んだ順に決まった ID を返し mock ごとに 1 から始まる', () {
+      final first = MockIdGen();
+      expect(
+        [first.newId(), first.newId(), first.newId()],
+        ['id-0001', 'id-0002', 'id-0003'],
+      );
+      final second = MockIdGen();
+      expect(second.newId(), 'id-0001');
+      expect(first.newId(), 'id-0004');
+    });
+
+    test('呼ばれた回数が読める', () {
+      final idGen = MockIdGen();
+      expect(idGen.calls, 0);
+      idGen.newId();
+      idGen.newId();
+      expect(idGen.calls, 2);
+    });
+  });
 }

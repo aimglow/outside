@@ -5,6 +5,7 @@ import {
   createMockClock,
   createMockConfig,
   createMockHttp,
+  createMockIdGen,
   createMockSet,
   createMockStorage,
 } from '../src/mock/index';
@@ -179,8 +180,26 @@ describe('REQ-OUT-MOCK mock の Config', () => {
   });
 });
 
+describe('TC-OUT-IDGEN-MOCK mock の IdGen', () => {
+  it('id-0001 から 呼んだ順に決まった ID を返し mock ごとに 1 から始まる', () => {
+    const first = createMockIdGen();
+    expect([first.newId(), first.newId(), first.newId()]).toEqual(['id-0001', 'id-0002', 'id-0003']);
+    const second = createMockIdGen();
+    expect(second.newId()).toBe('id-0001');
+    expect(first.newId()).toBe('id-0004');
+  });
+
+  it('呼ばれた回数が読める', () => {
+    const idGen = createMockIdGen();
+    expect(idGen.calls).toBe(0);
+    idGen.newId();
+    idGen.newId();
+    expect(idGen.calls).toBe(2);
+  });
+});
+
 describe('REQ-OUT-MOCK mock の set', () => {
-  it('渡した値から 4 つの mock を作る', async () => {
+  it('渡した値から 5 つの mock を作る', async () => {
     const set = createMockSet({
       startMs: START,
       routes: [{ method: 'GET', url: 'https://api.example.test/', response: { status: 204 } }],
@@ -190,5 +209,6 @@ describe('REQ-OUT-MOCK mock の set', () => {
     expect((await set.http.request({ method: 'GET', url: 'https://api.example.test/' })).status).toBe(204);
     expect(set.storage.get('k')).toBeNull();
     expect(set.config.get('MODE')).toBe('test');
+    expect(set.idGen.newId()).toBe('id-0001');
   });
 });

@@ -1,5 +1,6 @@
-// outside の口 (port) と 本物の実装 (real)。
-// 外 (時計・timer・通信・browser の保存・環境変数) を直に触るのは この file だけ。
+// outside の口 (port) と 本物の実装 (real)。Node と Next.js 向け (部品 next)。
+// 外 (時計・timer・通信・browser の保存・環境変数・乱数) を直に触るのは この file だけ。
+// 依存は node:* の標準 module だけ (next・react・@angular/* を使わない)。
 // 外の物は 使う時に初めて取りに行く (import しただけでは 何も触らない)。
 
 /** timer の控え。clearTimeout に渡すためだけに使う。 */
@@ -49,12 +50,19 @@ export interface Config {
   get(name: string): string | undefined;
 }
 
+/** 新しい ID を返す。 */
+export interface IdGen {
+  /** 呼ぶたびに 違う ID を返す。空の文字列は返さない。 */
+  newId(): string;
+}
+
 /** 1 つの処理に渡す port の組。 */
 export interface OutsideSet {
   clock: Clock;
   http: Http;
   storage: Storage;
   config: Config;
+  idGen: IdGen;
 }
 
 /** real が使う fetch の形。 */
@@ -170,6 +178,20 @@ export function createRealConfig(options: RealConfigOptions = {}): Config {
   };
 }
 
+/** crypto.randomUUID で UUID v4 を返す IdGen。crypto は 使う時に取る。 */
+export function createRealIdGen(): IdGen {
+  return {
+    newId() {
+      const crypto = needGlobal<{ randomUUID?: () => string }>('crypto');
+      if (typeof crypto.randomUUID !== 'function') {
+        throw new Error('outside: crypto.randomUUID is not available in this environment');
+      }
+      // this が外れると動かない実装があるため crypto の method として呼ぶ。
+      return crypto.randomUUID();
+    },
+  };
+}
+
 export interface RealSetOptions {
   fetch?: FetchLike;
   storage?: 'local' | 'session' | WebStorageLike;
@@ -183,5 +205,6 @@ export function createRealSet(options: RealSetOptions = {}): OutsideSet {
     http: createRealHttp(options.fetch),
     storage: createRealStorage(options.storage),
     config: createRealConfig(options.config),
+    idGen: createRealIdGen(),
   };
 }
