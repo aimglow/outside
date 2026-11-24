@@ -67,6 +67,12 @@ cases:
     input: 同じ種の 2 つの mock に同じ長さの順で Read / 違う種 / 1 回で 64 byte と 32 byte を 2 回 / WithErr
     expect: 同じ種は同じ byte。違う種は違う byte。分けて読んでも 続けて読んでも 同じ列。記録は 読んだ長さの順。WithErr の後は n=0 と その誤り。
 
+  - id: TC-OUT-RANDOM-FE
+    requirement: REQ-OUT-CONTRACT
+    behavior: next・angular・flutter の Random は real と mock で 渡した byte 列を全部埋め、mock は 種と呼び順だけで決まり 長さを記録し withErr の後は投げる。
+    input: 16 byte と 8 byte の read を続けて / 同じ種の 2 つの mock / 違う種 / 24 byte を 1 回と 16+8 / withErr
+    expect: 全部埋まる (real は 続けて読んだ 16 byte が互いに違う)。同じ種は同じ byte、違う種は違う byte、分けても同じ列。記録は 長さの順。withErr の後は その誤りを投げる。
+
   - id: TC-OUT-NO-TOOL-NAME
     requirement: REQ-OUT-NO-TOOL-NAME
     behavior: Go の部品は 特定のツールの名前の口を持たず git の program を起こさない (requires_git_worktree は .git を探して確かめる)。

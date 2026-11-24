@@ -177,6 +177,11 @@ ports:
       methods: [newId]
       rule: real は 呼ぶたびに違う ID (UUID v4 の形、乱数は crypto の物) を返す。
       mock: id-0001・id-0002 … と 呼んだ順に決まった ID を返す。
+    - name: Random
+      does: 長さを決めた乱数の byte 列を返す (trace の id・nonce 等)。
+      methods: [read]
+      rule: read(buf) は 渡した byte 列 (TS = Uint8Array、Dart = Uint8List) を全部埋める。real = crypto の乱数 (TS = crypto.getRandomValues、Dart = Random.secure)。
+      mock: 種 (seed) で決まる byte 列を返す (同じ種・同じ呼び順なら同じ byte、分けて読んでも続けて読んでも同じ列)。読んだ長さを記録する。withErr で 以後の read が その誤りを投げる。
   runtime:
     next: Node と Next.js の server・client。Config の real は 渡した値の表 → process.env の順に引く。Storage の real は 使う時に localStorage・sessionStorage を取る (server では 渡した Web Storage の形を使う)。
     angular: browser。Config の real は 渡した値の表だけを引く (process を見ない)。DI の token は 各 project の adapters 層が持つ (@angular/core に依存しない)。
