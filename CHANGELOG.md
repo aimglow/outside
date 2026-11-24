@@ -100,3 +100,8 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 - Base に EnsureWorkdir を足した (nil なら Workdir と同じ)。RunToolWith に 自前の Base を渡す側は 足さなくても 今までどおり動く。
 - 利用する側がやる事: tool の workdir_root を repo の中の相対 path (例 ".work/<tool>"、.gitignore に入れる) にする。$CCARK_DATA の下を置き場にしない (ccark が約束した置き場ではない)。
 
+## docs/v0.4.0 (2026-11-24)
+
+- test の書き方の規則の正本を ccark の `docs/conventions/test-writing.md`（全 project 共通、R0〜R7・V1〜V3）に一本化した。test-classification.md と app-rules.md §1 は 規則を自前で持たず 分類 A / B / C を その規則番号へ対応させるだけにした（規則集を 2 つにしない）。
+- 利用する側がやる事: docs/v0.4.0 を取り込む。各 project の完了の条件に test-writing.md §6 の 4 条件（testguard-writing の段・棚卸し・Nx の入力の宣言・陽性対照）を入れる。
+
