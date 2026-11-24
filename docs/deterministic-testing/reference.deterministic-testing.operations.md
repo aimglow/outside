@@ -69,3 +69,18 @@ outside repo (github.com/aimglow/outside、編集するのは outside 門番だ�
 1. **project の seat**: 口が足りない・規則で表せない物が出た → 業務の背景を除いた依頼 (app-rules.md §4 の書式) を outside 門番へ `ccark send`。
 2. **outside 門番**: `reference.deterministic-testing.gatekeeper-rules.md` に照らして審査 → Real・Mock・両面の test を実装 → §3 で版を出す。
 3. **project の seat**: §4 で取り込み 作業を再開 → `ccark prepush-gate` で完了を確かめる。
+
+---
+
+## 6. 各 project の付け替えの完了の条件
+
+各 project は 業務の作業より先に 次の全部 (AND) を満たす。issue の DoD は この節を指して書く。
+目的 = test の結果を 入力だけで決まる形にし cache を効かせて 同じ入力の test を二度回さない (build の slot の無駄な詰まりを減らす) こと と、壊れた code で必ず落ちる test だけを残して 品質を担保すること。
+
+1. `outside` の部品を `scripts/sync-outside.sh` で repo の中に置いている (その project の stack の部品と docs)。置いた写しは編集しない。
+2. 外を直に呼ぶ code が `libs/outside`・`libs/platform/*` の real・入口の `main` にしか無い = lint-go・lint-ts・lint-dart (その project の stack の分) の違反 0。Nx の `layer:` 境界の違反 0。
+3. `libs/platform` が lint-platform の check に通る (push の前の検査の段として宣言)。依存先に固有の取り決めを読む物は lib、起こして終了コードを見るだけの物は `outside` の子 process の口。
+4. test が ccark の `docs/conventions/test-writing.md` に合う: §6 の 4 条件 (段 `testguard-writing`・既存の違反の棚卸し・外の入力の宣言 (Nx の task の inputs を含む)・陽性対照) を満たし、app と tool の test は mock だけ、実物に触れる test は `libs/platform` の結合 test (tag `integration`) だけ、分類 C (test-classification.md §1) は消す。
+5. 最終の確かめ = 独立の clone で `e2e/cache_test.txt` (無ければ作る) に 1 行足して commit し `ccark prepush-gate --full --keep-going` → 回った段 0。同じ commit の 2 回目 → 回った段 0。両方の log の行を issue に置く。回った段が残れば 段の名前と理由 (log の「段の指紋の再利用をしない [理由]」) を名指し、ccark の側の原因なら ccark の窓口へ送る。
+6. 以上が その project の流れで main (または 宣言の land 先) に land している。
+
