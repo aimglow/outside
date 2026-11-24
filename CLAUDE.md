@@ -23,13 +23,13 @@ outside は 全 project が module として取り込む共通部品である。
 ## 編集する者
 
 - この repo を編集するのは 常駐の **outside 門番** (`outside-gatekeeper`、solviento) だけ。役の規約 = ccark の `agents/outside-gatekeeper.md`、
-  門番規約 = `docs/deterministic-testing/08_agents_md_outside_gatekeeper.md`。
+  門番規約 = `docs/deterministic-testing/reference.deterministic-testing.gatekeeper-rules.md`。
 - 各 project の seat は この repo を直に編集しない。口や method が足りない時は 門番へ `ccark send` で依頼する
-  (書式 = `docs/deterministic-testing/07_agents_md_app_template.md` §4)。
+  (書式 = `docs/deterministic-testing/reference.deterministic-testing.app-rules.md` §4)。
 
 ## 使われ方 (取り込みの流れ)
 
-正本 = `docs/deterministic-testing/` (README と 01〜09)。
+正本 = `docs/deterministic-testing/` (`reference.deterministic-testing.md` と その part)。
 
 1. project の seat が 門番へ依頼する。
 2. 門番が 門番規約に照らして審査し、Real・Mock・両面の test を実装し、`./scripts/release.sh <major|minor|patch>` で test を回して tag を切る。

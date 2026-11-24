@@ -9,7 +9,7 @@
 ```text
 # 隣接配置された outside リポジトリ
 ../outside/
-├── CLAUDE.md                  # 08_agents_md_outside_gatekeeper.md を配置
+├── CLAUDE.md                  # reference.deterministic-testing.gatekeeper-rules.md を配置
 ├── scripts/
 │   └── release.sh             # 全言語テスト＆自動タグ発行スクリプト
 ├── go/                        # Go 実装・テスト
@@ -19,7 +19,7 @@
 
 # 本体 Nx ワークスペース
 ./workspace/
-├── CLAUDE.md                  # 07_agents_md_app_template.md を配置
+├── CLAUDE.md                  # reference.deterministic-testing.app-rules.md を配置
 ├── scripts/
 │   └── sync-outside.sh        # git archive によるクリーン同期スクリプト
 └── libs/outside/
@@ -190,6 +190,6 @@ fi
 1. **本体セッション（開発中）:**
    OS プリミティブの不足を検知 → 業務背景を削ぎ落とした仕様書を作成し、`outside` 専用セッションへ `relay`。
 2. **`outside` 専用セッション（門番）:**
-   `08_agents_md_outside_gatekeeper.md` に照らし合わせて審査 → `Real` + `Mock` + 両面テストを実装 → `./scripts/release.sh` を実行 → 発行されたタグ名（例: `v0.2.0`）を返却。
+   `reference.deterministic-testing.gatekeeper-rules.md` に照らし合わせて審査 → `Real` + `Mock` + 両面テストを実装 → `./scripts/release.sh` を実行 → 発行されたタグ名（例: `v0.2.0`）を返却。
 3. **本体セッション（再開）:**
    `./scripts/sync-outside.sh all v0.2.0` を実行 → Nx キャッシュが更新されたクリーンな状態で実装・Unit テストを再開 → `ccark prepush-gate` で完了検証。

@@ -52,15 +52,15 @@ workspace/
 
 | ファイル名 | 対象読者 | 内容の概要 |
 | :--- | :--- | :--- |
-| **`01_architecture_overview.md`** | アーキテクト / 開発者 | Nx ワークスペース構成、`outside/{go,angular,next,flutter}` と `adapters` の責務境界、別リポジトリ＋`git archive` 運用の整合性 |
-| **`02_non_deterministic_catalog.md`** | 全開発者 / AI | キャッシュを破壊する全非決定要素カタログ（AI開発基盤特有の PID・UDS・FS監視・Ticker・Map順序から BtoC 端末境界まで） |
-| **`03_test_classification_and_anti_patterns.md`** | 全開発者 / AI | テストの目的と手段の分類（分類A/B/C）、愚かなテストの排除基準、Integration テストの物理的隔離ルール |
-| **`04_outside_spec_and_implementations.md`** | 基盤実装者 / AI | `libs/outside/{go,angular,next,flutter}` の標準インターフェースと `Real` / `Mock` 完全実装リファレンス |
-| **`05_adapters_design_and_patterns.md`** | アプリ実装者 / AI | `libs/platform/` および `apps/*/platform/` の 3 ファイル分離（`interface` / `real` / `mock`）と具体実装パターン |
-| **`06_lint_and_nx_enforcement.md`** | Tech Lead / CI担当 | `@nx/enforce-module-boundaries`、`golangci-lint`、ESLint、Dart禁則チェック、`nx.json` キャッシュ最適化設定 |
-| **`07_agents_md_app_template.md`** | **Claude Code（本体用）** | 各アプリ・本体ワークスペースにそのまま配置する `CLAUDE.md` 完成版（判断基準・雛形・Relayプロトコル完備） |
-| **`08_agents_md_outside_gatekeeper.md`** | **Claude Code（門番用）** | `outside` 基盤専用セッションに読み込ませる厳格な門番 `CLAUDE.md`（業務ロジック・FW依存混入防止） |
-| **`09_operations_and_ci_scripts.md`** | Tech Lead / AI | 専用セッションへの `relay` 運用手順、`release.sh`（マイクロCI/CD）、`sync-outside.sh`（クリーン同期）スクリプト一式 |
+| **`reference.deterministic-testing.architecture.md`** | アーキテクト / 開発者 | Nx ワークスペース構成、`outside/{go,angular,next,flutter}` と `adapters` の責務境界、別リポジトリ＋`git archive` 運用の整合性 |
+| **`reference.deterministic-testing.non-deterministic.md`** | 全開発者 / AI | キャッシュを破壊する全非決定要素カタログ（AI開発基盤特有の PID・UDS・FS監視・Ticker・Map順序から BtoC 端末境界まで） |
+| **`reference.deterministic-testing.test-classification.md`** | 全開発者 / AI | テストの目的と手段の分類（分類A/B/C）、愚かなテストの排除基準、Integration テストの物理的隔離ルール |
+| **`reference.deterministic-testing.outside-spec.md`** | 基盤実装者 / AI | `libs/outside/{go,angular,next,flutter}` の標準インターフェースと `Real` / `Mock` 完全実装リファレンス |
+| **`reference.deterministic-testing.adapters.md`** | アプリ実装者 / AI | `libs/platform/` および `apps/*/platform/` の 3 ファイル分離（`interface` / `real` / `mock`）と具体実装パターン |
+| **`reference.deterministic-testing.enforcement.md`** | Tech Lead / CI担当 | `@nx/enforce-module-boundaries`、`golangci-lint`、ESLint、Dart禁則チェック、`nx.json` キャッシュ最適化設定 |
+| **`reference.deterministic-testing.app-rules.md`** | **Claude Code（本体用）** | 各アプリ・本体ワークスペースにそのまま配置する `CLAUDE.md` 完成版（判断基準・雛形・Relayプロトコル完備） |
+| **`reference.deterministic-testing.gatekeeper-rules.md`** | **Claude Code（門番用）** | `outside` 基盤専用セッションに読み込ませる厳格な門番 `CLAUDE.md`（業務ロジック・FW依存混入防止） |
+| **`reference.deterministic-testing.operations.md`** | Tech Lead / AI | 専用セッションへの `relay` 運用手順、`release.sh`（マイクロCI/CD）、`sync-outside.sh`（クリーン同期）スクリプト一式 |
 
 ---
 
