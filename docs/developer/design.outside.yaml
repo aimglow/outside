@@ -101,8 +101,10 @@ requirements:
       言語とツールの慣習に任せ 設計の review で見る。
   - id: REQ-OUT-INTEGRATION-PLACE
     text: >
-      本物の外部に触れる test (integration の印を持つ test) は adapters 層 (libs/platform/**) と project が adapter と宣言した dir の中だけに置く
-      (test-classification.md §4)。その外に在れば 検査が file を名指して落とす。宣言は outside-platform.toml の adapter_dirs。
+      本物の外部に触れる test は adapters 層 (libs/platform/**) と project が adapter と宣言した dir の中だけに置く
+      (test-classification.md §4。apps と tools には 印の有無に依らず 置かない)。その外に
+      integration の印を持つ test か 本物の口を作る物 (outside の real・adapters の real) を使う test が在れば 検査が file を名指して落とす。
+      宣言は outside-platform.toml の adapter_dirs。
   - id: REQ-OUT-LINT
     text: >
       各 stack の lint の設定を この repo が持ち、project は それを取り込む。
@@ -246,17 +248,46 @@ lint:
       runtime が無い: outside の部品を足すのと同じ扱い (門番へ依頼)。
       3 file に分けられない依存先: project の中で例外を作らない。門番へ「何を表したいか」を送り 門番が 規則を足して版を出すか 今の形で表す方法を返す。
     tests:
-      purpose: integration の印を持つ test が 置いてよい場所の外に在れば落とす (REQ-OUT-INTEGRATION-PLACE)。
-      how: 同じ道具の tests --repo <repo の根> [--vocab <宣言>]。repo の木を歩き 印を持つ test の file を集め 置いてよい場所と照らす。
+      purpose: >
+        本物の外部に触れる test が 置いてよい場所の外に在れば落とす (REQ-OUT-INTEGRATION-PLACE)。判定は 2 つ =
+        marks (integration の印を持つ) と real_use (印に依らず 本物の口を作る物を使う)。
+      how: >
+        同じ道具の tests --repo <repo の根> [--vocab <宣言>]。repo の木を歩き 置いてよい場所の外の test の file と
+        置いてよい場所の中の adapters の本物の file (と 各 dir の go.mod・pubspec.yaml) を読み 2 つの判定に掛ける。
+        規則の表の正本 = lint-platform/placement/rules.go。
       marks:
-        go: 名前が *_test.go で //go:build の式が tag integration を持つ (go/build/constraint で読む)。
+        go: 名前が *_test.go で //go:build の式 (無ければ // +build の行の積) で tag integration が 肯定で効く (他の tag の ある組み合わせで integration の真偽が 式の真偽を決める。go/build/constraint で読む)。
         ts: 名前が *.integration.spec.* か *.integration.test.* (ts・tsx・js・mjs)。
-        dart: 名前が *_test.dart で 中に @Tags([... 'integration' ...]) か tags: に 'integration' を持つ。
-      allowed: libs/platform/** と 宣言 adapter_dirs (repo の根からの相対 path の一覧。. と 根の外は 宣言できない = 判定不能)。
-      skip: .git・node_modules・.dart_tool の dir と libs/outside/** (取り込んだ写し。部品の test は写さない)。
-      not_checked: 印を持たずに 本物の外部に触れる test (印の無い物は 書く時の審査と testguard-writing が持つ)。
-      exit: 0 = 置き場の外に無い / 1 = 在る (file と runtime を名指す) / 3 = 読めない (木か宣言が読めない)。
-      vocab: outside-platform.toml に書けるのは capabilities と adapter_dirs。
+        dart: >
+          名前が *_test.dart で 中に @Tags([... 'integration' ...]) か tags: に 'integration' (または "integration") を持つ。
+      real_use:
+        test_files: go = *_test.go / ts = *.spec.* か *.test.* (ts・tsx・js・mjs) / dart = *_test.dart。
+        outside:
+          go: import path github.com/aimglow/outside/go の selector (別名・dot import も解く。go/parser で読む) で RunTool・NewClock・NewEnv・NewFS・NewProc・NewWorkdir・NewSysInfo・NewIdGen・NewRandom (go/real.go の公開の名前)。
+          ts: >
+            specifier が @aimglow/outside-next・@aimglow/outside-angular (と その下の path) か libs/outside/next・libs/outside/angular を指す相対 path の import で
+            名前が createReal で始まる物 (別名で受けても元の名で見る。* as の名前空間は 使う所の名前で見る)。import type は見ない。
+          dart: package:outside/ を import した file で Real<大文字>…( の呼び出しか OutsideSet.real。
+        adapters:
+          real_files: 雛形の決まり (lint.platform の rules) の real の file = go adapter_real.go / ts real.ts / dart adapter_real.dart を 置いてよい場所の中から集める。
+          go: adapter_real.go の dir の package の import path (一番近い go.mod の module + dir の相対) を import し adapter_real.go が公開する top level の名前 (型・関数・変数・定数) を selector で使う。
+          ts: >
+            specifier の最後の分節が real か real.ts の import (どこの物でも)。または lib (real.ts の dir、src か lib なら その親) を
+            指す specifier (相対 path が lib の下を指す か 分節に lib の dir 名を含む) から その real.ts が export する名前を import する。
+          dart: >
+            import の URI が adapter_real.dart で終わる。または lib (一番近い pubspec.yaml の dir) を import し
+            (package:<pubspec の name>/ か 相対 URI が lib の下を指す か 分節に lib の dir 名を含む)
+            その adapter_real.dart が宣言する class・top level の関数の名前を 呼び出すか member を引く (名前の照合)。
+        output: >
+          違反 <path>:<行>: <runtime> の test が 本物の口 <名前> を使う (置き場の外。test-classification.md §4)。
+      allowed: libs/platform/** と 宣言 adapter_dirs (repo の根からの相対 path の一覧。path の区切りで比べる。空・.・絶対 path・根の外は 宣言できない = 判定不能)。
+      skip: .git・node_modules・.dart_tool の dir と libs/outside/** (取り込んだ写し。部品の test は写さない) と symlink の dir。
+      not_checked: >
+        印を持たず 本物の口も使わずに 本物の外部に触れる test (標準 library を直に呼ぶ等。書く時の審査と testguard-writing が持つ)。
+        反射・文字列で組んだ import・動的 import (import()・require)・tsconfig の paths の別名だけで lib を指す import・
+        go.mod の replace で 別の module path に付け替えた import・本物を返す 置き場の外の helper を経由する形 は 見えない。
+      exit: 0 = 置き場の外に無い / 1 = 在る (file と行と runtime と名前を名指す) / 3 = 読めない (木・宣言・file・式が読めない。path を名乗る)。
+      vocab: outside-platform.toml に書けるのは capabilities と adapter_dirs (check・scaffold・tests が 同じ宣言を読む)。
     cases:
       # 想定したケース。表に無いケースが出たら ここに足し 規則を直す。
       - 新しい外の依存先 (同じ機能・別の依存先、例 db-mysql-go) → 今の語で表せる

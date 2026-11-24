@@ -217,15 +217,23 @@ cases:
 
   - id: TC-OUT-LINT-PLATFORM-TESTS
     requirement: REQ-OUT-INTEGRATION-PLACE
-    behavior: tests は integration の印を持つ test が libs/platform/** と adapter_dirs の外に在れば 名指して落とす。印の無い test と 置き場の中の物は 通す。
+    behavior: >
+      tests は libs/platform/** と adapter_dirs の外に integration の印を持つ test か 本物の口を作る物を使う test が在れば 名指して落とす。
+      印も本物の口も無い test と 置き場の中の物は 通す。
     input: >
       test が作る repo の木 = libs/platform/db-postgres-go/x_test.go (//go:build integration) / tools/dbgate/db_test.go (//go:build integration) /
       tools/dbgate/unit_test.go (印なし) / apps/web/a.integration.spec.ts / libs/platform/http-fetch-next/src/b.integration.spec.ts /
       apps/mobile/test/c_test.dart (@Tags(['integration'])) / tools/legacy/d_test.go (//go:build integration && linux) と adapter_dirs = ["tools/legacy"] /
-      node_modules・libs/outside の下の 印つき file / adapter_dirs = ["."] か ["../x"] の宣言
+      node_modules・libs/outside の下の 印つき file / adapter_dirs = ["."] か ["../x"] の宣言。
+      本物の口 = 印なしで outside.NewProc を呼ぶ tools/x/a_test.go (別名の import も) / createRealSet を別名で import する apps/web/b.spec.ts /
+      package:outside を import して RealHttp( を呼ぶ apps/mobile/test/c2_test.dart / libs/platform/db-postgres-go の adapter_real.go の Real を使う tools/y/d_test.go /
+      ./real を import する apps/web/e.spec.ts / mock だけを使う test (outsidemock・createMockSet・MockHttp・adapter_mock) /
+      置き場の中で本物を使う test
     expect: >
-      tools/dbgate/db_test.go・apps/web/a.integration.spec.ts・apps/mobile/test/c_test.dart の 3 件を runtime と共に名指し exit 1。
-      印なし・libs/platform の下・宣言の dir の下・node_modules と libs/outside の下は 名指さない。. と 根の外の宣言は exit 3。
+      印の 3 件 (tools/dbgate/db_test.go・apps/web/a.integration.spec.ts・apps/mobile/test/c_test.dart) を runtime と共に名指し
+      本物の口の 5 件 (tools/x/a_test.go・apps/web/b.spec.ts・apps/mobile/test/c2_test.dart・tools/y/d_test.go・apps/web/e.spec.ts) を 行と名前と共に名指し exit 1。
+      印なし・libs/platform の下・宣言の dir の下・node_modules と libs/outside の下・mock だけの test・置き場の中の本物は 名指さない。
+      . と 根の外の宣言は exit 3。
 
   - id: TC-OUT-SYNC
     requirement: REQ-OUT-VENDOR
