@@ -17,6 +17,9 @@ src=$w/src
 g init -q "$src"
 mkdir -p "$src/lint-platform" "$src/go"
 echo v1 > "$src/lint-platform/a.txt"; echo go1 > "$src/go/g.txt"
+mkdir -p "$src/lint-platform/testdata" "$src/lint-platform/test" "$src/lint-platform/sub"
+echo t > "$src/lint-platform/a_test.go"; echo t > "$src/lint-platform/testdata/x"; echo t > "$src/lint-platform/test/y_test.dart"
+echo t > "$src/lint-platform/l.test.js"; echo t > "$src/lint-platform/sub/b_test.go"; echo keep > "$src/lint-platform/sub/b.go"
 g -C "$src" add -A && g -C "$src" commit -qm 1
 g -C "$src" tag lint-platform/v0.1.0
 g -C "$src" tag go/v0.6.0
@@ -39,6 +42,9 @@ snapshot() { (cd "$dst" && find libs -type f | sort | xargs shasum) ; }
 [ ! -e "$dst/libs/outside/lint-platform/stray.txt" ] && ok "余分な file が消える" || ng "余分な file が残る"
 [ "$(cat "$dst/libs/outside/lint-platform/.outside-version")" = lint-platform/v0.2.0 ] && ok ".outside-version = tag" || ng ".outside-version が違う"
 [ ! -e "$dst/libs/outside/go" ] && ok "他の部品を触らない" || ng "他の部品を置いた"
+left=$(cd "$dst/libs/outside/lint-platform" && find . \( -name '*_test.go' -o -name '*.test.js' -o -name '*_test.dart' -o -name testdata -o -name test \) | sort | tr '\n' ' ')
+[ -z "$left" ] && ok "部品の test を写さない" || ng "部品の test が写った: $left"
+[ -f "$dst/libs/outside/lint-platform/sub/b.go" ] && ok "test でない file は写す" || ng "test でない file が消えた"
 ls -d "$dst"/.outside-sync.* >/dev/null 2>&1 && ng "一時の dir が残る" || ok "一時の dir が残らない"
 
 # TC-OUT-SYNC: 誤りの時は 1 byte も変えない

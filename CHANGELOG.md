@@ -87,3 +87,8 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 - scripts/release.sh: 打つ前に origin の tag を取り直す。部品の形でない tag が在れば止まる。部品の形でない古い tag (v0.1.0〜v0.6.0・lint/go/*・lint/naming/v0.6.0) は消した (参照している project が無い事を確かめた上で)。
 - 利用する側がやる事: docs/v0.2.0 を取り込む。他の部品は変わらない。
 
+## scripts・docs/v0.3.0 (2026-11-24)
+
+- scripts/sync-outside.sh: 部品の test (Go の `*_test.go`・`testdata/`、TS の `*.test.*`・`*.spec.ts`、Dart の `*_test.dart`・`test/`) を写さない。写すと 取り込んだ project の test の検査 (ccark testguard 等) が 部品の test を その project の test として咎める (kifune #244 で実測)。
+- 利用する側がやる事: outside の main の `scripts/sync-outside.sh` を写し直し、置いた部品を 同じ tag で取り込み直す (部品の test が消える)。docs は docs/v0.3.0。
+

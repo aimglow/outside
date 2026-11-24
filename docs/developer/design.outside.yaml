@@ -242,7 +242,7 @@ versioning:
   consume:
     how: >
       sync-outside.sh <部品> <tag> (project の中に置く script)。一時の bare repo に その tag だけを取り
-      (git fetch --depth 1)、git archive で 部品の path を取り出し place を丸ごと置き換え .outside-version を書く。
+      (git fetch --depth 1)、git archive で 部品の path を取り出し place を丸ごと置き換え .outside-version を書く。部品の test (*_test.go・testdata/・*.test.*・*.spec.ts・*_test.dart・test/) は写さない (REQ-OUT-REAL-TESTED-HERE = 部品の test は この repo の中だけで回す)。
       GitHub は git archive --remote に応じないので 一時の bare repo を経る (実測 2026-11-24)。
     fetch_from: https://github.com/aimglow/outside.git
     fetch_identity: git から取得するのは ccark-gitops の名義 (seat の検査も image の build (gitops) も 同じ)。
@@ -255,5 +255,6 @@ delivery:
   consequence: 確かめは commit の前に 手元で回す。壊れた版を tag にしない。
 
 open:
+  - sync-outside.sh 自身の版の配り方 (今は 各 project が main から写し CHANGELOG の scripts の項で写し直す)
   - 部品の間に 版の前提 (例 lint-go が go の新しい口の名前を前提にする) が生じたら その時に 前提を宣言する形を決める
   - Go の FS の method の最小の組 (足りない物は MINOR で足す)

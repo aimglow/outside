@@ -3,6 +3,7 @@
 # project の repo の根で実行する。部品と置き場の対応 = outside の docs/developer/design.outside.yaml の components。
 # 取得元 = https://github.com/aimglow/outside.git (OUTSIDE_REPO で差し替えられる。test は test が作った bare repo を渡す)。
 # GitHub は git archive --remote に応じないので 一時の bare repo に その tag だけを取り そこから git archive する。
+# 部品の test (Go の *_test.go・testdata/、TS の *.test.*・*.spec.ts、Dart の *_test.dart・test/) は写さない。
 # 誤りの時は 置き場を 1 byte も変えずに exit 1 で終わる。
 set -euo pipefail
 
@@ -26,6 +27,9 @@ git -C "$work/repo.git" fetch -q --depth 1 "$repo" "refs/tags/$tag:refs/tags/$ta
 mkdir "$work/out"
 git -C "$work/repo.git" archive "$tag" "$src" 2>/dev/null | tar -x -C "$work/out" || die "tag $tag に $src が無い"
 [ -d "$work/out/$src" ] || die "tag $tag に $src が無い"
+# 部品の test は project で回さないので 写さない (project の test の検査に 部品の test を混ぜない)。
+find "$work/out/$src" \( -name '*_test.go' -o -name '*.test.js' -o -name '*.test.ts' -o -name '*.spec.ts' -o -name '*_test.dart' \) -type f -delete
+find "$work/out/$src" -depth -type d \( -name testdata -o -name test \) -exec rm -rf {} +
 printf '%s\n' "$tag" > "$work/out/$src/.outside-version"
 
 mkdir -p "$(dirname "$dest")"

@@ -57,8 +57,8 @@ outside repo (github.com/aimglow/outside、編集するのは outside 門番だ�
 
 ## 4. 取り込み (各 project)
 
-1. 初回だけ `outside` の `scripts/sync-outside.sh` を 自分の `scripts/` へ写す。
-2. `./scripts/sync-outside.sh <部品> <tag>` を repo の根で実行する。一時の bare repo に その tag だけを取り (`git fetch --depth 1`)、`git archive` で 部品を取り出し 置き場を丸ごと置き換え `.outside-version` に tag を書く。誤り (他の部品の tag・形の違う tag・無い tag) の時は 置き場を変えずに止まる。GitHub は `git archive --remote` に応じないので この形を取る。
+1. `outside` の main の `scripts/sync-outside.sh` を 自分の `scripts/` へ写す。`CHANGELOG.md` に `scripts` の項が足されたら 写し直す。
+2. `./scripts/sync-outside.sh <部品> <tag>` を repo の根で実行する。一時の bare repo に その tag だけを取り (`git fetch --depth 1`)、`git archive` で 部品を取り出し 置き場を丸ごと置き換え `.outside-version` に tag を書く。部品の test (Go の `*_test.go`・`testdata/`、TS の `*.test.*`・`*.spec.ts`、Dart の `*_test.dart`・`test/`) は写さない (部品の test は project で回さない)。誤り (他の部品の tag・形の違う tag・無い tag) の時は 置き場を変えずに止まる。GitHub は `git archive --remote` に応じないので この形を取る。
 3. 置き場の写しは編集しない。部品の test は 置き場では回さない。
 4. MAJOR は 各 project が 直す準備ができた時に その部品だけ上げる (全 project が同時に上げなくてよい)。
 
