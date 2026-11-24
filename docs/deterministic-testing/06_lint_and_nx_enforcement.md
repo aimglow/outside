@@ -163,6 +163,11 @@ dart run outside_lint:check apps libs/platform
 
 `*_real.dart` と `main.dart` は 検査の対象 dir から外すか 個別に除く。実機パスのハードコード（`/Users/` 等）は 同じ検査に足す。
 
+## 4.1 adapters 層の命名の検査（`outside` の lint）
+
+`libs/platform/` の直下の dir 名を 05 §0 の命名規則で検査する。検査は `outside` の lint の 1 つ（`lint/naming`）として `outside` が持ち、各 project は 取り込んだ検査を push の前の検査（`ccark prepush-gate`）の 1 段として宣言して回す。各 project で 検査を書かない。
+規則の正規表現と 機能の語の表は 05 §0 と この検査の 2 か所に在り、`outside` の test が 2 つの一致を確かめる。
+
 ## 5. Nx キャッシュ設定の最適化（`nx.json`）
 
 マシン環境の違いで Nx のタスクハッシュが変わるのを防ぐため、`namedInputs` から環境変数依存を排除し、決定論的な入力のみをハッシュ対象にします。
