@@ -14,13 +14,13 @@
 
 | 部分 | 許す値 |
 | :--- | :--- |
-| `<機能>` | 次の表の語だけ: `authn`（認証）・`db`（DB）・`vcs`（版管理）・`container`（container）・`migrate`（migration）・`schema`（API の型定義）・`config`（設定）・`log`（log）・`http`（通信）・`kv`（保存）・`ipc`（process 間通信）・`remote`（遠隔の実行）。語を足すときは この表を先に直す。 |
+| `<機能>` | 語の表の正本 = `outside` の `lint/naming/rules.go`（今の語: `authn`（認証）・`db`（DB）・`vcs`（版管理）・`container`（container）・`migrate`（migration）・`schema`（API の型定義）・`config`（設定）・`log`（log）・`http`（通信）・`kv`（保存）・`ipc`（process 間通信）・`remote`（遠隔の実行））。語を足すときは `rules.go` を直して 版を上げる。 |
 | `<依存先>` | 外部の製品・プロトコルの名前（小文字・`-` 区切り。例: `postgres`・`google-iap`・`cloudflare-access`・`git`・`podman`・`atlas`・`buf`・`ssh`）。 |
 | `<runtime>` | `go`・`next`・`angular`・`flutter` のどれか（`outside` と同じ 4 つ）。 |
 
 - 1 lib = 1 依存先。`common`・`util`・`shared`・`helper` 等の 依存先の分からない名前を作らない。
 - 依存先の実物を起こす test の部品（例: 決めた版の DB を起こす部品）は その依存先の lib の 結合テストの中に置き、独立の lib にしない。
-- 検査の正規表現（lint の段で `libs/platform/` の直下の dir 名に当てる）:
+- 検査 = `outside` の `lint/naming`（06 §4.1）。正規表現の正本も `rules.go`（今の形）:
 
 ```text
 ^(authn|db|vcs|container|migrate|schema|config|log|http|kv|ipc|remote)-[a-z0-9]+(-[a-z0-9]+)*-(go|next|angular|flutter)$

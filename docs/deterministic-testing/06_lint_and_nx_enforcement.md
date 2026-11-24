@@ -163,10 +163,15 @@ dart run outside_lint:check apps libs/platform
 
 `*_real.dart` と `main.dart` は 検査の対象 dir から外すか 個別に除く。実機パスのハードコード（`/Users/` 等）は 同じ検査に足す。
 
-## 4.1 adapters 層の命名の検査（`outside` の lint）
+## 4.1 adapters 層の命名と 3 file の検査（`outside` の `lint/naming`）
 
-`libs/platform/` の直下の dir 名を 05 §0 の命名規則で検査する。検査は `outside` の lint の 1 つ（`lint/naming`）として `outside` が持ち、各 project は 取り込んだ検査を push の前の検査（`ccark prepush-gate`）の 1 段として宣言して回す。各 project で 検査を書かない。
-規則の正規表現と 機能の語の表は 05 §0 と この検査の 2 か所に在り、`outside` の test が 2 つの一致を確かめる。
+- 置き場 = `outside` repo の `lint/naming/`（Go、module `github.com/aimglow/outside/lint/naming`）。
+  - `rules.go` = 規則の正本（機能の語の表・runtime の 4 つ・名前の正規表現・runtime ごとの 3 file の名前）。docs は ここを指すだけで 語の表を写さない。
+  - `check.go` = 判定（dir 名と各 dir の file 名の一覧を値で受け 違反の一覧を値で返す。disk を読まない）。test は この判定を 値の表で確かめる（`outside` の中だけで回す）。
+  - `main.go` = 入口（`--root` の dir を読んで判定へ渡す）。
+- 検査すること（`--root` の直下の dir ごと）: 名前が `<機能>-<依存先>-<runtime>` か・3 file（Go = `interface.go`・`adapter_real.go`・`adapter_mock.go` / TS = `interface.ts`・`real.ts`・`mock.ts` / Dart = `interface.dart`・`adapter_real.dart`・`adapter_mock.dart`）が在るか。
+- 出力 = 違反 1 件ずつ `libs/platform/<名前>: <何が違うか>`。exit = 0 違反なし / 1 違反あり / 3 読めない（判定不能）。
+- 各 project = `.ccark-prepush.toml` に 1 段として宣言する: run = `go run github.com/aimglow/outside/lint/naming@<tag> --root libs/platform`、reads = `libs/platform/**` と tag。違反は push の前と便で赤 = land できない。`libs/platform` と tag が変わらなければ 段は前の PASS に当たり 回らない。各 project で この検査を書かない。
 
 ## 5. Nx キャッシュ設定の最適化（`nx.json`）
 
