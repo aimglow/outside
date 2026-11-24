@@ -1,0 +1,440 @@
+# 04. `libs/share/outside/{go,angular,next,flutter}` 標準仕様と実装リファレンス
+
+本章では、Nx ワークスペースの `libs/share/outside/` 配下に配置する 4 つのランタイム基盤の標準インターフェースと、`Real`（本番用）・`Fake`（テスト用）の完全な実装リファレンスを定義します。
+
+---
+
+## 1. 全ランタイム共通の設計原則
+
+1. **ペア提供の原則:** すべてのプリミティブは `Real` 実装と `Fake` 実装のセットで提供する。
+2. **ゼロ汚染の原則:** `Fake` を生成（`NewFake` / `createFakeOutside` / `Outside.fake`）するたびに完全に独立したインメモリ状態が作られ、テスト間の状態汚染が起きないこと。
+3. **検証ヘルパーの同梱:** `Fake` 側には、テストのアサーションを簡潔にするためのヘルパー（仮想環境変数のセット、コマンド実行履歴 `execHistory`、仮想時計の進行 `Advance` など）を標準装備する。
+
+---
+
+## 2. `libs/share/outside/go`（Go ランタイム）
+
+AI開発基盤（Session Relay・台帳・監視 Daemon）を完全に決定論化するため、`afero.Fs` に加えて **タイマー進行（`Advance`）付き仮想時計**・**決定論的 `IdGen`**・**固定 `SysInfo`** を備えます。
+
+```go
+// libs/share/outside/go/outside.go
+package outside
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/spf13/afero"
+)
+
+// Clock は時刻取得およびタイマー待機を抽象化する。
+type Clock interface {
+	Now() time.Time
+	Sleep(d time.Duration)
+}
+
+// CmdRunner は外部プロセス実行を抽象化する。
+type CmdRunner interface {
+	Run(name string, args ...string) ([]byte, error)
+}
+
+// SysInfo は実行マシン・プロセス固有情報を抽象化する。
+type SysInfo interface {
+	Hostname() string
+	HomeDir() string
+	Pid() int
+	IsTTY() bool
+}
+
+// IdGen は決定論的な ID・乱数生成を抽象化する。
+type IdGen interface {
+	NewID() string
+}
+
+// Env は Go アプリケーションが必要とする全 OS 境界を束ねる。
+type Env struct {
+	Fs      afero.Fs
+	Clock   Clock
+	Cmd     CmdRunner
+	Sys     SysInfo
+	Id      IdGen
+	Getenv  func(key string) string
+	// Fake 検証用フィールド（Real では nil）
+	Fake *FakeControls
+}
+
+// FakeControls はテスト時のみ使用する操作・検証用ハンドル。
+type FakeControls struct {
+	Clock       *FakeClock
+	Cmd         *FakeCmdRunner
+	EnvVars     map[string]string
+	mu          sync.Mutex
+}
+
+func (f *FakeControls) SetEnv(key, val string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.EnvVars[key] = val
+}
+
+// --- Real 実装 ---
+
+type realClock struct{}
+func (realClock) Now() time.Time        { return time.Now().UTC() }
+func (realClock) Sleep(d time.Duration) { time.Sleep(d) }
+
+type realCmdRunner struct{}
+func (realCmdRunner) Run(name string, args ...string) ([]byte, error) {
+	return exec.Command(name, args...).CombinedOutput()
+}
+
+type realSysInfo struct{}
+func (realSysInfo) Hostname() string { h, _ := os.Hostname(); return h }
+func (realSysInfo) HomeDir() string  { d, _ := os.UserHomeDir(); return d }
+func (realSysInfo) Pid() int         { return os.Getpid() }
+func (realSysInfo) IsTTY() bool      { return false }
+
+type realIdGen struct{ counter atomic.Uint64 }
+func (r *realIdGen) NewID() string {
+	return fmt.Sprintf("%d-%d", time.Now().UnixNano(), r.counter.Add(1))
+}
+
+// NewReal は本番用の OS 境界セットを生成する。
+func NewReal() *Env {
+	return &Env{
+		Fs:     afero.NewOsFs(),
+		Clock:  realClock{},
+		Cmd:    realCmdRunner{},
+		Sys:    realSysInfo{},
+		Id:     &realIdGen{},
+		Getenv: os.Getenv,
+	}
+}
+
+// --- Fake 実装 ---
+
+type FakeClock struct {
+	mu      sync.Mutex
+	current time.Time
+}
+
+func (c *FakeClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.current
+}
+
+func (c *FakeClock) Sleep(d time.Duration) {
+	c.Advance(d)
+}
+
+func (c *FakeClock) Advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.current = c.current.Add(d)
+}
+
+type RecordedCmd struct {
+	Name string
+	Args []string
+}
+
+type FakeCmdRunner struct {
+	mu      sync.Mutex
+	History []RecordedCmd
+	StubOut []byte
+	StubErr error
+}
+
+func (c *FakeCmdRunner) Run(name string, args ...string) ([]byte, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.History = append(c.History, RecordedCmd{Name: name, Args: args})
+	return c.StubOut, c.StubErr
+}
+
+type fakeSysInfo struct{}
+func (fakeSysInfo) Hostname() string { return "test-host" }
+func (fakeSysInfo) HomeDir() string  { return "/virtual/home" }
+func (fakeSysInfo) Pid() int         { return 1000 }
+func (fakeSysInfo) IsTTY() bool      { return false }
+
+type fakeIdGen struct{ seq atomic.Uint64 }
+func (g *fakeIdGen) NewID() string {
+	return fmt.Sprintf("id-%04d", g.seq.Add(1))
+}
+
+// NewFake はテスト用の 100% 決定論的なインメモリ環境を生成する。
+func NewFake(fixedTime time.Time) *Env {
+	fc := &FakeClock{current: fixedTime.UTC()}
+	fcmd := &FakeCmdRunner{}
+	envVars := make(map[string]string)
+	controls := &FakeControls{
+		Clock:   fc,
+		Cmd:     fcmd,
+		EnvVars: envVars,
+	}
+	return &Env{
+		Fs:    afero.NewMemMapFs(),
+		Clock: fc,
+		Cmd:   fcmd,
+		Sys:   fakeSysInfo{},
+		Id:    &fakeIdGen{},
+		Getenv: func(key string) string {
+			controls.mu.Lock()
+			defer controls.mu.Unlock()
+			return envVars[key]
+		},
+		Fake: controls,
+	}
+}
+```
+
+---
+
+## 3. `libs/share/outside/next`（Next.js / Node.js ランタイム）
+
+サーバーサイド（Route Handler / Server Action / UseCase）向けの OS 境界です。
+
+```typescript
+// libs/share/outside/next/index.ts
+import * as realFs from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { randomUUID } from 'node:crypto';
+import { Volume, createFsFromVolume } from 'memfs';
+
+const execFileAsync = promisify(execFile);
+
+export interface Outside {
+  fs: typeof realFs;
+  now: () => Date;
+  env: (key: string) => string | undefined;
+  exec: (cmd: string, args: string[]) => Promise<string>;
+  newId: () => string;
+}
+
+export interface FakeOutside extends Outside {
+  setEnv: (key: string, value: string) => void;
+  advanceTimeMs: (ms: number) => void;
+  stubExec: (stdout: string) => void;
+  execHistory: Array<{ cmd: string; args: string[] }>;
+}
+
+export function createRealOutside(): Outside {
+  return {
+    fs: realFs,
+    now: () => new Date(),
+    env: (key) => process.env[key],
+    exec: async (cmd, args) => {
+      const { stdout } = await execFileAsync(cmd, args, { encoding: 'utf-8' });
+      return stdout;
+    },
+    newId: () => randomUUID(),
+  };
+}
+
+export function createFakeOutside(fixedIso = '2026-01-01T00:00:00.000Z'): FakeOutside {
+  const vol = new Volume();
+  let currentMs = Date.parse(fixedIso);
+  const envMap = new Map<string, string>();
+  let nextStdout = '';
+  let idSeq = 0;
+  const execHistory: Array<{ cmd: string; args: string[] }> = [];
+
+  return {
+    fs: createFsFromVolume(vol).promises as unknown as typeof realFs,
+    now: () => new Date(currentMs),
+    env: (key) => envMap.get(key),
+    exec: async (cmd, args) => {
+      execHistory.push({ cmd, args });
+      return nextStdout;
+    },
+    newId: () => {
+      idSeq += 1;
+      return `id-${String(idSeq).padStart(4, '0')}`;
+    },
+    setEnv: (key, value) => {
+      envMap.set(key, value);
+    },
+    advanceTimeMs: (ms) => {
+      currentMs += ms;
+    },
+    stubExec: (stdout) => {
+      nextStdout = stdout;
+    },
+    execHistory,
+  };
+}
+```
+
+---
+
+## 4. `libs/share/outside/angular`（Angular / ブラウザ ランタイム）
+
+ブラウザ環境には Node.js の `fs` や `process.env` が存在しないため、ブラウザ固有の非決定要素（時計・乱数・Web Storage・Location 情報）を隔離します。
+
+```typescript
+// libs/share/outside/angular/index.ts
+export interface KeyValueStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+  clear(): void;
+}
+
+export interface BrowserOutside {
+  now: () => Date;
+  newId: () => string;
+  localStorage: KeyValueStorage;
+  sessionStorage: KeyValueStorage;
+  origin: () => string;
+}
+
+export interface FakeBrowserOutside extends BrowserOutside {
+  advanceTimeMs: (ms: number) => void;
+  setOrigin: (origin: string) => void;
+}
+
+function createMemoryStorage(): KeyValueStorage {
+  const store = new Map<string, string>();
+  return {
+    getItem: (k) => store.get(k) ?? null,
+    setItem: (k, v) => { store.set(k, v); },
+    removeItem: (k) => { store.delete(k); },
+    clear: () => { store.clear(); },
+  };
+}
+
+export function createRealBrowserOutside(): BrowserOutside {
+  return {
+    now: () => new Date(),
+    newId: () => crypto.randomUUID(),
+    localStorage: window.localStorage,
+    sessionStorage: window.sessionStorage,
+    origin: () => window.location.origin,
+  };
+}
+
+export function createFakeBrowserOutside(
+  fixedIso = '2026-01-01T00:00:00.000Z',
+): FakeBrowserOutside {
+  let currentMs = Date.parse(fixedIso);
+  let idSeq = 0;
+  let currentOrigin = 'https://app.example.test';
+
+  return {
+    now: () => new Date(currentMs),
+    newId: () => {
+      idSeq += 1;
+      return `id-${String(idSeq).padStart(4, '0')}`;
+    },
+    localStorage: createMemoryStorage(),
+    sessionStorage: createMemoryStorage(),
+    origin: () => currentOrigin,
+    advanceTimeMs: (ms) => { currentMs += ms; },
+    setOrigin: (origin) => { currentOrigin = origin; },
+  };
+}
+```
+
+---
+
+## 5. `libs/share/outside/flutter`（Dart / Flutter ランタイム）
+
+`package:flutter` を一切 `import` しない Pure Dart 構成とすることで、UI なしの高速な `dart test` / `flutter test` キャッシュを保証します。
+
+```dart
+// libs/share/outside/flutter/lib/outside.dart
+import 'dart:io' as io;
+import 'package:file/file.dart';
+import 'package:file/local.dart';
+import 'package:file/memory.dart';
+import 'package:clock/clock.dart';
+
+abstract class ProcessRunner {
+  Future<String> run(String executable, List<String> arguments);
+}
+
+class RealProcessRunner implements ProcessRunner {
+  @override
+  Future<String> run(String executable, List<String> arguments) async {
+    final result = await io.Process.run(executable, arguments);
+    if (result.exitCode != 0) {
+      throw StateError('Process failed (${result.exitCode}): ${result.stderr}');
+    }
+    return result.stdout.toString();
+  }
+}
+
+class FakeProcessRunner implements ProcessRunner {
+  String stubStdout = '';
+  final List<String> history = [];
+
+  @override
+  Future<String> run(String executable, List<String> arguments) async {
+    history.add('$executable ${arguments.join(' ')}'.trim());
+    return stubStdout;
+  }
+}
+
+class Outside {
+  final FileSystem fs;
+  final Clock clock;
+  final ProcessRunner process;
+  final String? Function(String key) env;
+  final String Function() newId;
+
+  // Fake 操作用ハンドル（Real では null）
+  final FakeProcessRunner? fakeProcess;
+  final Map<String, String>? fakeEnvMap;
+
+  Outside({
+    required this.fs,
+    required this.clock,
+    required this.process,
+    required this.env,
+    required this.newId,
+    this.fakeProcess,
+    this.fakeEnvMap,
+  });
+
+  factory Outside.real() {
+    var seq = 0;
+    return Outside(
+      fs: const LocalFileSystem(),
+      clock: const Clock(),
+      process: RealProcessRunner(),
+      env: (key) => io.Platform.environment[key],
+      newId: () {
+        seq += 1;
+        return '${DateTime.now().toUtc().microsecondsSinceEpoch}-$seq';
+      },
+    );
+  }
+
+  factory Outside.fake({DateTime? fixedTime}) {
+    final baseTime = (fixedTime ?? DateTime.utc(2026, 1, 1)).toUtc();
+    final fakeProc = FakeProcessRunner();
+    final envMap = <String, String>{};
+    var seq = 0;
+
+    return Outside(
+      fs: MemoryFileSystem(),
+      clock: Clock.fixed(baseTime),
+      process: fakeProc,
+      env: (key) => envMap[key],
+      newId: () {
+        seq += 1;
+        return 'id-${seq.toString().padLeft(4, '0')}';
+      },
+      fakeProcess: fakeProc,
+      fakeEnvMap: envMap,
+    );
+  }
+}
+```

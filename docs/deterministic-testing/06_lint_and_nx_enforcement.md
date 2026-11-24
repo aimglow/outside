@@ -1,0 +1,219 @@
+# 06. 機械的強制ルール（Lint・Nx モジュール境界・キャッシュ最適化）
+
+AI エージェントに規約を守らせる最大の鍵は、プロンプトでの説得ではなく **「違反コードを書いた瞬間に Lint / ビルドが即座に赤くなり、自己修正せざるを得ない状態を作ること」** です。
+
+---
+
+## 1. Nx モジュール境界の強制（`@nx/enforce-module-boundaries`）
+
+各プロジェクトの `project.json` に以下のタグを付与します。
+
+- `libs/share/outside/*`: `["scope:outside"]`
+- `libs/share/adapters/*`: `["scope:adapter"]`
+- `apps/*`: `["scope:app"]`
+
+ワークスペースルートの `eslint.config.js` で依存方向をロックします。
+
+```javascript
+// eslint.config.js（Nx モジュール境界設定抜粋）
+{
+  files: ['**/*.ts', '**/*.tsx', '**/*.js'],
+  rules: {
+    '@nx/enforce-module-boundaries': [
+      'error',
+      {
+        enforceBuildableLibDependency: true,
+        allow: [],
+        depConstraints: [
+          {
+            // outside は他への依存を一切持たない（純粋なリーフ基盤）
+            sourceTag: 'scope:outside',
+            onlyDependOnLibsWithTags: ['scope:outside'],
+          },
+          {
+            // adapter は outside と他の adapter にのみ依存可能
+            sourceTag: 'scope:adapter',
+            onlyDependOnLibsWithTags: ['scope:outside', 'scope:adapter'],
+          },
+          {
+            // app は adapter と outside に依存可能
+            sourceTag: 'scope:app',
+            onlyDependOnLibsWithTags: ['scope:outside', 'scope:adapter', 'scope:app'],
+          },
+        ],
+      },
+    ],
+  },
+}
+```
+
+---
+
+## 2. TypeScript（Next.js / Angular）禁止構文・実機パス禁止 ESLint
+
+`libs/share/outside/**` および `**/adapters/**/real.ts` **以外**のすべてのファイル（ビジネスロジック、`fake.ts`、Unit テスト）に適用します。
+
+```javascript
+// eslint.config.js（非決定要素・生IO・実機絶対パス禁止ルール）
+{
+  files: ['**/*.ts', '**/*.tsx'],
+  ignores: [
+    'libs/share/outside/**',
+    '**/adapters/**/real.ts',
+    '**/main.ts',
+  ],
+  rules: {
+    // 1. 生の Node.js IO・プロセスの直接 import 禁止
+    'no-restricted-imports': [
+      'error',
+      {
+        paths: [
+          { name: 'fs', message: 'out.fs を使用してください' },
+          { name: 'node:fs', message: 'out.fs を使用してください' },
+          { name: 'node:fs/promises', message: 'out.fs を使用してください' },
+          { name: 'child_process', message: 'out.exec を使用してください' },
+          { name: 'node:child_process', message: 'out.exec を使用してください' },
+          { name: 'os', message: '環境依存になるため禁止です' },
+          { name: 'node:os', message: '環境依存になるため禁止です' },
+          { name: 'next/headers', message: 'adapters/auth-cookie 等を経由してください' },
+        ],
+      },
+    ],
+    // 2. 実行ディレクトリ・実環境変数の参照禁止
+    'no-restricted-properties': [
+      'error',
+      { object: 'process', property: 'cwd', message: '実行パス依存になるため禁止です' },
+      { object: 'process', property: 'env', message: 'out.env() を使用してください' },
+      { object: 'Date', property: 'now', message: 'out.now() を使用してください' },
+      { object: 'Math', property: 'random', message: 'out.newId() を使用してください' },
+      { object: 'crypto', property: 'randomUUID', message: 'out.newId() を使用してください' },
+      { object: 'window', property: 'localStorage', message: 'out.localStorage を使用してください' },
+      { object: 'window', property: 'sessionStorage', message: 'out.sessionStorage を使用してください' },
+    ],
+    'no-restricted-globals': [
+      'error',
+      { name: '__dirname', message: '実行パス依存になるため禁止です' },
+      { name: '__filename', message: '実行パス依存になるため禁止です' },
+      { name: 'localStorage', message: 'out.localStorage を使用してください' },
+      { name: 'sessionStorage', message: 'out.sessionStorage を使用してください' },
+    ],
+    // 3. 引数なし new Date() および実機固有の絶対パスハードコード禁止
+    'no-restricted-syntax': [
+      'error',
+      {
+        selector: "NewExpression[callee.name='Date'][arguments.length=0]",
+        message: '引数なしの new Date() は禁止です。out.now() を使用してください',
+      },
+      {
+        selector: "Literal[value=/^(\/Users\/|\/home\/|\/var\/|\/private\/|\/tmp\/|[A-Za-z]:\\)/]",
+        message: '実機パスは禁止です。仮想パス（例: "/virtual/..."）を使用してください',
+      },
+    ],
+  },
+}
+```
+
+---
+
+## 3. Go 禁止構文・実機パス禁止 `.golangci.yml`
+
+```yaml
+# .golangci.yml
+linters:
+  enable:
+    - forbidigo
+
+linters-settings:
+  forbidigo:
+    forbid:
+      - p: '^time\.Now$'
+        msg: "直接 time.Now() を呼ばず、env.Clock.Now() を使用してください"
+      - p: '^time\.Sleep$'
+        msg: "直接 time.Sleep() を呼ばず、env.Clock.Sleep() を使用してください"
+      - p: '^os\.(Open|Create|ReadFile|WriteFile|MkdirAll|Remove|RemoveAll|Stat)$'
+        msg: "直接 os のファイル操作を行わず、env.Fs (afero.Fs) を使用してください"
+      - p: '^os\.(Getenv|LookupEnv|Setenv)$'
+        msg: "直接環境変数を参照せず、env.Getenv() を使用してください"
+      - p: '^os\.(Getwd|TempDir|UserHomeDir|UserConfigDir|UserCacheDir|Hostname|Getpid)$'
+        msg: "実行環境・機体依存になるため禁止です。env.Sys または仮想パスを使用してください"
+      - p: '^exec\.Command(Context)?$'
+        msg: "直接 exec.Command を呼ばず、env.Cmd を使用してください"
+      - p: '^(math/rand|crypto/rand)\.'
+        msg: "直接乱数を生成せず、env.Id.NewID() を使用してください"
+
+issues:
+  exclude-rules:
+    # outside 基盤と、アダプタの本番実装(*_real.go)および main.go のみ許可
+    - path: ^(libs/share/outside/go/|.*/adapters/.*_real\.go$|.*/cmd/.*/main\.go$)
+      linters:
+        - forbidigo
+```
+
+---
+
+## 4. Dart / Flutter 禁止構文・実機パス検出スクリプト
+
+Dart は標準アナライザだけではメソッド単位の禁止が不十分なため、Nx の `lint` ターゲットに以下のスクリプトを組み込みます。
+
+```bash
+#!/usr/bin/env bash
+# scripts/check-forbidden-dart.sh
+set -euo pipefail
+
+# libs/share/outside/flutter と *_real.dart と main.dart 以外を全スキャン
+TARGETS=$(find apps libs -type f -name "*.dart"   ! -path "libs/share/outside/flutter/*"   ! -name "*_real.dart"   ! -name "main.dart")
+
+if [[ -z "$TARGETS" ]]; then
+  exit 0
+fi
+
+PATTERN="import 'dart:io'|DateTime\.now\(\)|Process\.run|Directory\.current|Directory\.systemTemp|Platform\.(environment|script|localHostname)|Random\(|(/Users/|/home/|/var/|C:\\)"
+
+if echo "$TARGETS" | xargs grep -rnE "$PATTERN"; then
+  echo "ERROR: 禁止された生IO・現在時刻・環境依存パス・乱数が検出されました。" >&2
+  echo "       Outside または adapters/*_real.dart 経由に修正してください。" >&2
+  exit 1
+fi
+```
+
+---
+
+## 5. Nx キャッシュ設定の最適化（`nx.json`）
+
+マシン環境の違いで Nx のタスクハッシュが変わるのを防ぐため、`namedInputs` から環境変数依存を排除し、決定論的な入力のみをハッシュ対象にします。
+
+```json
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "namedInputs": {
+    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "production": [
+      "default",
+      "!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)",
+      "!{projectRoot}/**/*_test.go",
+      "!{projectRoot}/test/**/*_test.dart",
+      "!{projectRoot}/AGENTS.md"
+    ],
+    "sharedGlobals": [
+      "{workspaceRoot}/nx.json",
+      "{workspaceRoot}/.golangci.yml",
+      "{workspaceRoot}/eslint.config.js"
+    ]
+  },
+  "targetDefaults": {
+    "test": {
+      "cache": true,
+      "inputs": ["default", "^production"],
+      "configurations": {
+        "ci": {
+          "ci": true
+        }
+      }
+    },
+    "lint": {
+      "cache": true,
+      "inputs": ["default", "sharedGlobals"]
+    }
+  }
+}
+```

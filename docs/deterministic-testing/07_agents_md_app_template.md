@@ -1,0 +1,185 @@
+# AGENTS.md — Nx ワークスペース テスト決定性・外部依存隔離 製造規約
+
+> 本ファイルは、本体ワークスペース（各アプリおよび `libs/share/adapters`）を担当する Claude Code（CC）が常時遵守すべき製造規約です。
+
+---
+
+## 0. 最上位目的（Absolute Mandate）
+
+本ワークスペースにおけるすべての単体テスト（Unit Test）は、**100% 決定的（Deterministic）かつ環境非依存（Hermetic）** でなければならない。
+- 実行するマシン・OS・タイムゾーン・現在日時・ディレクトリパス・環境変数・PID・ネットワーク状態が変わっても、テストの入力と出力は **1 ビットも変化してはならない**。
+- Nx のテストキャッシュを無効化させるコード（生 IO・現在時刻・未固定乱数・実環境変数・実機絶対パス・非決定的な Map 順序）の混入を一切禁ずる。
+
+---
+
+## 1. テストの目的と手段の判断基準（愚かなテストの排除）
+
+コードおよびテストを書く前に、必ず以下の分類に従って「何をテストすべきか・すべきでないか」を判断せよ。
+
+### 分類 A：ロジックと振る舞いの検証（テストの 95% はこれ）
+- **目的:** 入力データに対して、ビジネスロジックや状態遷移が正しく動作するかを確認する。
+- **手段:** `libs/share/outside` と `adapters` の **`Fake`（固定値・インメモリ実装）** を注入し、時刻・ファイル・環境変数・ID・外部応答をすべて固定して検証する。
+
+### 分類 B：境界バリデーション・設定仕様の検証
+- **目的:** 必須環境変数の欠落時にエラーになるか、またはステージ指定に応じて正しい設定オブジェクト（Cookie 属性等）が組み立てられるかを検証する。
+- **手段:** 実環境の環境変数や `.env` を読んではならない。`FakeOutside` に**仮想環境変数マップ**（例: `setEnv('APP_STAGE', 'production')`）を注入し、設定組み立て関数またはバリデーション関数単体をテストせよ。
+
+### 分類 C：作成を禁止する「愚かなテスト」（DO NOT WRITE）
+以下に該当するテストは価値がなくキャッシュ破壊と保守コスト増大を招くため、**絶対に書いてはならない**。
+1. **実環境の一致確認テスト:**
+   - 実機の `process.env` やローカル `.env` に特定キーが存在するかをアサートするテスト。
+2. **モックのオウム返しテスト（Tautological Test）:**
+   - `Fake` に `"ok"` をスタブ登録し、ビジネスロジックを通さずに単にそれを呼んで `"ok"` が返ることをアサートするテスト。
+3. **フレームワーク・標準ライブラリ内部挙動のテスト:**
+   - Next.js ルーター、Angular DI、Flutter 標準 Widget、JSON シリアライザ自体の仕様テスト。
+4. **Unit テスト内での実外部接続:**
+   - 実 DB・実ファイル・実ソケット・外部 HTTP・実 CLI を叩くテスト。必要な場合は必ず `integration` タグ／別ファイル（`*.integration.spec.ts` / `//go:build integration` / `@Tags(['integration'])`）に隔離せよ。
+
+---
+
+## 2. 外部境界の適用範囲と配置先ルール
+
+以下の領域はすべて非決定的な外部境界である。ビジネスロジックおよび Unit テスト内での直接呼び出しを禁止し、必ず `outside` または `adapters` 経由でアクセスすること。
+
+| 領域 | 禁止される直接呼び出し | 正しい隔離先 |
+| :--- | :--- | :--- |
+| **時刻・タイマー** | `time.Now`, `time.Sleep`, `new Date()`, `Date.now()`, `DateTime.now()` | `libs/share/outside/{go,next,angular,flutter}` の `Clock` / `now` |
+| **ファイルシステム** | `os.*`, `node:fs`, `dart:io`, `Directory.current`, `os.TempDir` | `libs/share/outside/{go,next,flutter}` の `Fs`（仮想パス `/virtual/...` のみ使用） |
+| **環境変数** | `os.Getenv`, `process.env`, `Platform.environment` | `libs/share/outside/{go,next,flutter}` の `Getenv` / `env` |
+| **乱数・ID 生成** | `math/rand`, `crypto/rand`, `Math.random()`, `randomUUID()`, `Random()` | `libs/share/outside/{go,next,angular,flutter}` の `Id` / `newId` |
+| **外部プロセス実行** | `exec.Command`, `child_process`, `Process.run` | `libs/share/outside/{go,next,flutter}` の `Cmd` / `exec` / `process` |
+| **マシン・プロセス情報** | `os.Getpid`, `os.Hostname`, `os.UserHomeDir`, `process.cwd`, `__dirname` | `libs/share/outside/go` の `Sys`（他言語では仮想固定値を使用） |
+| **ブラウザ Storage** | `localStorage`, `sessionStorage` | `libs/share/outside/angular` の `localStorage` / `sessionStorage` |
+| **Cookie / FW API / IPC** | `next/headers` (`cookies()`), `SharedPreferences`, 実 UDS ソケット, 外部 SDK | `libs/share/adapters/*` または `apps/<app>/src/adapters/*` |
+
+---
+
+## 3. `adapters/` 実装および仮想パス・ソート規約
+
+1. **3 ファイル厳格分離:**
+   - 新規アダプタを作成する場合は、必ず `interface`・`real`（`*_real.go` / `*_real.dart`）・`fake`（`*_fake.go` / `*_fake.dart`）の 3 ファイルに分割すること。
+   - 生の外部 API・FW API の呼び出しは `real` ファイル内でのみ許可される。**`fake` ファイル内で現在時刻・乱数・実ファイル・実機パス取得関数を呼ぶことを固く禁ずる。**
+2. **仮想パスの統一（実機絶対パスの禁止）:**
+   - テストおよび `Fake` 実装内のパスは、すべて `/virtual/` をルートとした論理パス（例: `"/virtual/config/app.json"`）を使用すること。`/Users/...`, `/home/...`, `C:\...` 等のハードコードを禁ずる。
+3. **決定論的ソート規約（Go 必須）:**
+   - Go で台帳データ・キャッシュキー・JSON 出力を生成する際、`map` を直接シリアライズまたは反復してハッシュ化してはならない。必ずスライスに変換し `slices.Sort` / `slices.SortFunc` で決定論的にソートしてから出力すること。
+
+---
+
+## 4. `outside` 基盤改修プロトコル（専用セッションへの Relay 必須）
+
+`libs/share/outside/{go,angular,next,flutter}` は別リポジトリから `git archive`（タグ固定）で展開された共有基盤である。
+**本ワークスペースのセッションから `libs/share/outside/` 配下のファイルを直接編集することを固く禁ずる。**
+
+### 機能が不足している場合の必須フロー
+1. **責務の切り分け:**
+   - Pure な OS・ランタイムプリミティブ（未実装の FS 操作、タイマー機能等）のみ `outside` の追加対象とする。
+   - Cookie、特定 CLI ラッパー、UDS/IPC、FW プラグインは `adapters/` に実装せよ。
+2. **`outside` 専用セッションへの Relay:**
+   - 不足機能が OS プリミティブである場合、業務背景やアプリ名を一切含めず、以下の形式で `outside` 専用セッションへ `relay` を依頼せよ。
+   ```text
+   【outside 機能追加依頼】
+   - 対象ディレクトリ: libs/share/outside/(go | next | angular | flutter)
+   - 追加したいOSプリミティブ概要:
+   - 求めるシグネチャ案:
+   - Fake実装に求める振る舞い:
+   - 完了条件: Real/Fake両方のテストをPASSさせ、./scripts/release.sh で発行された新タグ名を返却すること。
+   ```
+3. **同期と再開:**
+   - 返却された新タグ名（例: `v0.2.0`）を受け取ったら、`./scripts/sync-outside.sh <対象言語> <タグ>` を実行して展開ディレクトリをクリーン置換し、作業を再開せよ。
+
+---
+
+## 5. 言語・フレームワーク別 実装およびテスト標準パターン
+
+### 5.1 Go（`libs/share/outside/go`）
+```go
+func TestDaemonHeartbeat(t *testing.T) {
+	env := outside.NewFake(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	env.Fake.SetEnv("DAEMON_MODE", "active")
+
+	d := NewDaemon(env)
+	d.Tick()
+	env.Fake.Clock.Advance(10 * time.Second)
+	d.Tick()
+
+	// env.Fs や env.Fake.Cmd.History を検証
+}
+```
+
+### 5.2 TypeScript — Next.js（`libs/share/outside/next`）
+```typescript
+import { describe, it, expect } from 'vitest';
+import { createFakeOutside } from '@share/outside/next';
+import { buildReport } from './buildReport';
+
+describe('buildReport', () => {
+  it('固定時刻と仮想FSでレポートを生成できる', async () => {
+    const out = createFakeOutside('2026-01-01T00:00:00.000Z');
+    out.setEnv('STAGE', 'prod');
+    await out.fs.mkdir('/virtual/in', { recursive: true });
+    await out.fs.writeFile('/virtual/in/data.txt', 'hello');
+
+    await buildReport(out, '/virtual/in/data.txt', '/virtual/out/res.txt');
+
+    expect(await out.fs.readFile('/virtual/out/res.txt', 'utf-8')).toBe(
+      '[2026-01-01T00:00:00.000Z][prod] hello',
+    );
+  });
+});
+```
+
+### 5.3 TypeScript — Angular（`libs/share/outside/angular`）
+```typescript
+import { TestBed } from '@angular/core/testing';
+import { createFakeBrowserOutside } from '@share/outside/angular';
+import { BROWSER_OUTSIDE } from '../../core/tokens';
+import { PrefsService } from './prefs.service';
+
+describe('PrefsService', () => {
+  it('仮想localStorageへ設定を保存できる', () => {
+    const fakeOut = createFakeBrowserOutside('2026-01-01T00:00:00.000Z');
+    TestBed.configureTestingModule({
+      providers: [
+        PrefsService,
+        { provide: BROWSER_OUTSIDE, useValue: fakeOut },
+      ],
+    });
+
+    const service = TestBed.inject(PrefsService);
+    service.saveTheme('dark');
+    expect(fakeOut.localStorage.getItem('theme')).toBe('dark');
+  });
+});
+```
+
+### 5.4 Dart / Flutter（`libs/share/outside/flutter`）
+```dart
+import 'package:flutter_test/flutter_test.dart';
+import 'package:outside_flutter/outside.dart';
+import 'package:mobile_client/features/draft/draft_repo.dart';
+
+void main() {
+  test('固定時刻で仮想FSに下書きを保存できる', () async {
+    final out = Outside.fake(fixedTime: DateTime.utc(2026, 1, 1));
+    final repo = DraftRepo(out);
+
+    await repo.save('/virtual/drafts/1.txt', 'content');
+
+    expect(
+      await out.fs.file('/virtual/drafts/1.txt').readAsString(),
+      '2026-01-01T00:00:00.000Z|content',
+    );
+  });
+}
+```
+
+---
+
+## 6. タスク完了前の必須自己検証ゲート（Verification Gate）
+
+タスク完了を報告する前に、必ず Nx コマンドで以下を実行し、すべて PASS させること。
+
+1. `npx nx affected -t lint`（禁止構文・実機パス・モジュール境界違反がゼロであること）
+2. `npx nx affected -t test`（すべての Unit テストが高速に PASS すること）
+3. 分類 C（愚かなテスト）に該当するテストを書いていないか自己点検し、該当する場合は削除すること。

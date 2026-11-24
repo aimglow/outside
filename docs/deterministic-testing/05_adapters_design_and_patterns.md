@@ -1,0 +1,236 @@
+# 05. `adapters` 設計・Real/Fake 分離と実装パターン
+
+`libs/share/adapters/` および `apps/<app>/src/adapters/` は、フレームワーク固有 API（Cookie、Flutter プラグイン等）やプロジェクト固有の外部境界（セッション間 IPC 通信、台帳ストレージ、外部 API 等）を隔離するレイヤーです。
+
+---
+
+## 1. 最重要ルール：3 ファイル分離による権限隔離
+
+AI に `adapters/` の作成を許可すると、手抜きをして **`Fake` 実装の中に `Date.now()` や実機パス（`/Users/...`）をハードコードするリスク**が発生します。
+
+これを防ぐため、すべてのアダプタは必ず以下の **3 ファイル構造** に分割し、`real` だけに生の外部 API 利用を許可します。
+
+```text
+libs/share/adapters/auth-cookie/
+├── interface.ts   # 純粋な型・インターフェース定義のみ（依存ゼロ）
+├── real.ts        # 【唯一許可】Next.js cookies() やブラウザ API を呼ぶ薄い接着剤
+└── fake.ts        # 【厳格制限】インメモリ実装。ビジネスロジックと同等のLint制限を受ける
+```
+
+Go / Dart の場合のファイル命名規則：
+- **Go:** `interface.go` / `adapter_real.go` / `adapter_fake.go`
+- **Dart:** `interface.dart` / `adapter_real.dart` / `adapter_fake.dart`
+
+### `Fake` 実装の鉄則
+- `Fake` 自身が時刻や ID を生成する必要がある場合は、`Fake` 内で `Date.now()` や `time.Now()` を絶対に呼ばず、**コンストラクタで `FakeOutside` を受け取るか、テストから固定値を渡す**こと。
+- 仮想ファイルパスを扱う場合は、必ず `/virtual/` をルートとした論理パス（例: `"/virtual/ipc/session.sock"`）のみを使用すること。
+
+---
+
+## 2. パターン①：Next.js Cookie アダプタ（`libs/share/adapters/auth-cookie`）
+
+プロジェクトやステージごとに属性や運用が変わる Cookie は `outside` ではなく `adapters` で隔離します。
+
+```typescript
+// libs/share/adapters/auth-cookie/interface.ts
+export interface CookieOptions {
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: 'strict' | 'lax' | 'none';
+  maxAgeSec: number;
+  path: string;
+}
+
+export interface AuthCookieAdapter {
+  getSessionToken(): Promise<string | undefined>;
+  setSessionToken(token: string, options: CookieOptions): Promise<void>;
+  clearSessionToken(): Promise<void>;
+}
+```
+
+```typescript
+// libs/share/adapters/auth-cookie/real.ts
+import { cookies } from 'next/headers';
+import type { AuthCookieAdapter, CookieOptions } from './interface';
+
+const COOKIE_NAME = '__Host-session';
+
+export class NextAuthCookieAdapter implements AuthCookieAdapter {
+  async getSessionToken(): Promise<string | undefined> {
+    const store = await cookies();
+    return store.get(COOKIE_NAME)?.value;
+  }
+
+  async setSessionToken(token: string, options: CookieOptions): Promise<void> {
+    const store = await cookies();
+    store.set(COOKIE_NAME, token, {
+      httpOnly: options.httpOnly,
+      secure: options.secure,
+      sameSite: options.sameSite,
+      maxAge: options.maxAgeSec,
+      path: options.path,
+    });
+  }
+
+  async clearSessionToken(): Promise<void> {
+    const store = await cookies();
+    store.delete(COOKIE_NAME);
+  }
+}
+```
+
+```typescript
+// libs/share/adapters/auth-cookie/fake.ts
+import type { AuthCookieAdapter, CookieOptions } from './interface';
+
+export class FakeAuthCookieAdapter implements AuthCookieAdapter {
+  public token: string | undefined = undefined;
+  public lastOptions: CookieOptions | undefined = undefined;
+
+  async getSessionToken(): Promise<string | undefined> {
+    return this.token;
+  }
+
+  async setSessionToken(token: string, options: CookieOptions): Promise<void> {
+    this.token = token;
+    this.lastOptions = options;
+  }
+
+  async clearSessionToken(): Promise<void> {
+    this.token = undefined;
+    this.lastOptions = undefined;
+  }
+}
+```
+
+---
+
+## 3. パターン②：AI開発基盤 セッション間 IPC アダプタ（Go）
+
+Unix Domain Socket（UDS）やローカル TCP を使ったセッション同士の `relay` 通信を、実ソケットを開かずにテスト可能にするパターンです。
+
+```go
+// libs/share/adapters/session-ipc/interface.go
+package sessionipc
+
+import "context"
+
+type Message struct {
+	FromSession string
+	ToSession   string
+	Payload     string
+}
+
+type Transport interface {
+	Send(ctx context.Context, msg Message) error
+	Receive(ctx context.Context, sessionID string) (Message, error)
+}
+```
+
+```go
+// libs/share/adapters/session-ipc/adapter_fake.go
+package sessionipc
+
+import (
+	"context"
+	"fmt"
+	"sync"
+)
+
+// FakeTransport は実ソケットを開かず、メモリ上のキューで決定論的にメッセージを受け渡す。
+type FakeTransport struct {
+	mu     sync.Mutex
+	queues map[string][]Message
+}
+
+func NewFakeTransport() *FakeTransport {
+	return &FakeTransport{
+		queues: make(map[string][]Message),
+	}
+}
+
+func (f *FakeTransport) Send(_ context.Context, msg Message) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.queues[msg.ToSession] = append(f.queues[msg.ToSession], msg)
+	return nil
+}
+
+func (f *FakeTransport) Receive(_ context.Context, sessionID string) (Message, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	q := f.queues[sessionID]
+	if len(q) == 0 {
+		return Message{}, fmt.Errorf("no message for session: %s", sessionID)
+	}
+	msg := q[0]
+	f.queues[sessionID] = q[1:]
+	return msg, nil
+}
+```
+
+---
+
+## 4. パターン③：Angular DI 連携（`InjectionToken`）
+
+Angular では `BrowserOutside` と各種アダプタを `InjectionToken` 経由で注入し、本番（`app.config.ts`）とテスト（`TestBed`）で差し替えます。
+
+```typescript
+// apps/admin-console/src/app/core/tokens.ts
+import { InjectionToken } from '@angular/core';
+import type { BrowserOutside } from '@share/outside/angular';
+
+export const BROWSER_OUTSIDE = new InjectionToken<BrowserOutside>('BROWSER_OUTSIDE');
+```
+
+```typescript
+// apps/admin-console/src/app/features/auth/token.service.spec.ts
+import { TestBed } from '@angular/core/testing';
+import { createFakeBrowserOutside } from '@share/outside/angular';
+import { BROWSER_OUTSIDE } from '../../core/tokens';
+import { TokenService } from './token.service';
+
+describe('TokenService', () => {
+  it('期限切れトークンを固定時刻で正しく判定できる', () => {
+    const fakeOut = createFakeBrowserOutside('2026-06-01T00:00:00.000Z');
+    fakeOut.localStorage.setItem('expires_at', '2026-05-31T23:59:59.000Z');
+
+    TestBed.configureTestingModule({
+      providers: [
+        TokenService,
+        { provide: BROWSER_OUTSIDE, useValue: fakeOut },
+      ],
+    });
+
+    const service = TestBed.inject(TokenService);
+    expect(service.isTokenValid()).toBe(false);
+  });
+});
+```
+
+---
+
+## 5. パターン④：Flutter プラグイン隔離（`SharedPreferences` 等）
+
+Flutter のネイティブプラグインは共有 `outside/flutter` に入れず、アプリまたは共有 `adapters` に切り出します。
+
+```dart
+// libs/share/adapters/kv-storage/interface.dart
+abstract class KvStorage {
+  Future<String?> read(String key);
+  Future<void> write(String key, String value);
+}
+
+// libs/share/adapters/kv-storage/adapter_fake.dart
+class FakeKvStorage implements KvStorage {
+  final Map<String, String> _data = {};
+
+  @override
+  Future<String?> read(String key) async => _data[key];
+
+  @override
+  Future<void> write(String key, String value) async {
+    _data[key] = value;
+  }
+}
+```
