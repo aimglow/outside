@@ -109,3 +109,11 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 
 - operations.md §6 = 各 project の付け替えの完了の条件 (6 つの AND) を足した。issue の DoD は この節を指して書く。
 
+
+## scripts・docs/v0.6.0 (2026-11-24)
+
+- scripts/sync-outside.sh: 写した中身の指紋を `.outside-version` に書く (1 行目 = tag のまま / 2 行目 = `fingerprint sha256:<全体>` / 続く行 = `file <sha256> <path>`)。
+  `sync-outside.sh --check <部品>` が 網に行かずに 置き場を数え直して照らす。exit 0 = 一致 / 1 = 違う (違う・増えた・消えた file を名指す) / 3 = 判定不能 (置き場・.outside-version・指紋の行が無い)。
+  理由: 写しを編集しない決まりを 合流後の木で 機械で確かめ 古い branch の merge で写しが書き換わるのを land の段で止める (kifune #244 の頼み)。
+- docs: 運用 (operations.md §2・§4) に 指紋と `--check` を足した。版は `.outside-version` の 1 行目 (`head -1`)。
+- 利用する側がやる事: outside の main の `scripts/sync-outside.sh` を写し直し、置いた部品を 同じ tag で取り込み直す (指紋が書かれる。指紋の無い写しは `--check` が判定不能 = exit 3)。land の前の段に 部品ごとに `./scripts/sync-outside.sh --check <部品>` を置く。docs は docs/v0.6.0。
