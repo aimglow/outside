@@ -40,6 +40,14 @@ cases:
       Lstat は IsSymlink。Readlink は 最後に貼った target。貼り替えの後 link 越しに 新しい中身が読める。link が file・dir と 親が無い は 誤り。
       根の外を指す link は 作れ Readlink は target を返すが 辿る ReadFile は 誤り。symlink でない path の Readlink は 誤り。
 
+  - id: TC-OUT-PROC-KILLGROUP
+    requirement: REQ-OUT-CONTRACT
+    behavior: KillGroup の子は ctx の終わりで 孫まで止まり Result.Killed = true。自分で終えた子は Killed = false。
+    input: real = test が作った helper が 孫を起こして待つ・ctx を短い期限で切る / KillGrace の短い値 / SIGTERM を無視する helper / 自分で終える helper。mock = ctx を受ける関数と 取り消した ctx
+    expect: >
+      real: Run は ctx の誤りを包み Killed = true。孫の pid に signal 0 が届かない (止まっている)。SIGTERM を無視する子も KillGrace の後に止まる。自分で終えた子は Killed = false で誤り無し。
+      mock: Killed = true と ctx の誤り。Cmds() に KillGroup・KillGrace が残る。
+
   - id: TC-OUT-PROC-LOOKPATH
     requirement: REQ-OUT-TOOL-ENV
     behavior: LookPath は 宣言した program の path を返し 宣言に無い名前は ErrUndeclaredProgram。
