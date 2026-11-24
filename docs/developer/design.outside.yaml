@@ -107,23 +107,32 @@ requirements:
 ports:
   backend_and_tools:
     - name: Clock
-      does: 今の時刻を返す。待つ。
-      methods: [Now, Sleep]
-      mock: 決めた時刻から始まり Advance で進む。Sleep は 実時間を待たず 時刻を進める。
+      does: 今の時刻を返す。待つ。timer・ticker を掛ける。
+      methods: [Now, Sleep, NewTimer, NewTicker, After]
+      rule: >
+        Timer = C() <-chan time.Time・Stop() bool・Reset(d) bool。Ticker = C() <-chan time.Time・Stop()。After(d) は d 後に 1 回届く channel。
+        channel は 1 つ分の buffer を持ち 受け手が読まなければ 次の発火を落とす (time と同じ)。経過 (Since・Until) は Now() から引く (口に足さない)。
+      mock: >
+        決めた時刻から始まり Advance で進む。Sleep は 実時間を待たず 時刻を進める。
+        Advance・Sleep で期限を過ぎた Timer・Ticker・After を 期限の順に発火する (channel に その期限の時刻を送る)。Ticker は 過ぎた回数だけ発火を試みる。
     - name: Env
       does: 環境変数を名前で読む。
       methods: [Lookup]
+      rule: 全部の一覧 (Environ) は持たない (宣言した名前だけを読ませる絞りを迂回させない)。子 process は Proc が 親の環境に Cmd.Env を足して受ける。
       mock: 渡した表だけを返す。表に無い名前は 無い と返す。
     - name: FS
       does: 宣言した根の下の file を読む・書く・一覧する。
-      methods: [ReadFile, WriteFile, ReadDir, Stat, Remove]
-      rule: 根の外の path は 誤り。IOFS(FS) は io/fs.FS として読ませる (io/fs を受ける値の関数へ渡す)。
+      methods: [ReadFile, WriteFile, ReadDir, Stat, Remove, Open, AppendFile, MkdirAll, Lstat, Rename, RemoveAll]
+      rule: >
+        根の外の path は 誤り (Rename は 両方の path)。IOFS(FS) は io/fs.FS として読ませる (io/fs を受ける値の関数へ渡す)。
+        Open は 読むだけの io.ReadCloser (stream で読む)。AppendFile は 無ければ作り 末尾に足す。Lstat は symlink を辿らず FileInfo.IsSymlink で名乗る。
+        RemoveAll は 根そのものを消さない (誤り)。無い path の RemoveAll は 誤りでない。
       mock: memory の上の木。
     - name: Proc
       does: 宣言した名前の program を起こし 結果を返す。
-      methods: [Run]
-      rule: tool-environment に無い program は 誤り。Cmd の Stdin は 子 process の標準入力に渡す (秘密を disk にも argv にも載せずに渡す)。
-      mock: 起こされた Cmd (引数・Stdin・Env・Dir) を記録し 決めた結果を返す。
+      methods: [Run, LookPath]
+      rule: tool-environment に無い program は 誤り。LookPath(name) は 宣言した program の 実行 file の path を返す (宣言に無い名前は 誤り)。Cmd の Stdin は 子 process の標準入力に渡す (秘密を disk にも argv にも載せずに渡す)。
+      mock: 起こされた Cmd (引数・Stdin・Env・Dir) を記録し 決めた結果を返す。LookPath は 渡した path を返す (渡していない名前は 見つからない誤り)。
     - name: Workdir
       does: 宣言した置き場の下に 作業場を作り 終わりに消す。作った作業場を根にした FS を返す。
       methods: [New, Path, Cleanup, FS]

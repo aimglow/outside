@@ -17,6 +17,25 @@ cases:
     mocks: なし (mock そのものが対象)
     expect: Now の値が 入力から計算した値に一致する。test の所要は 実時間に依らない。
 
+  - id: TC-OUT-CLOCK-TIMER
+    requirement: REQ-OUT-CONTRACT
+    behavior: Timer・Ticker・After は 期限が来たら channel に時刻を送る。Stop した物は送らない。Reset は期限を掛け直す。mock は Advance・Sleep で発火し 実時間を待たない。
+    input: 期限の違う Timer 2 つ・Ticker・After と Advance の長さ / Stop と Reset
+    mocks: なし (real は 短い期限で 自分で掛けた物だけ / mock は そのもの)
+    expect: 期限を過ぎた物だけが 期限の時刻を送る (mock は 期限の時刻と一致)。Stop の戻りは 止めた時 true・済んでいた時 false。Ticker は 過ぎた回数だけ発火を試み buffer 1 を超えた分は落ちる。
+
+  - id: TC-OUT-FS-MORE
+    requirement: REQ-OUT-CONTRACT
+    behavior: Open・AppendFile・MkdirAll・Lstat・Rename・RemoveAll が real と mock で同じ振る舞いをする。
+    input: 書いた file を Open で読む / AppendFile 2 回 / MkdirAll の入れ子 / Rename (根の中・根の外) / RemoveAll (dir・無い path・根) / Lstat (real は symlink を自分で作る)
+    expect: Open で書いた中身が読める・無い path は fs.ErrNotExist。AppendFile は 足した順に並ぶ。Rename の根の外は 誤り。RemoveAll は 中身ごと消え 無い path は 誤りでなく 根は 誤り。Lstat は symlink を IsSymlink で名乗る (mock の FS に symlink は無い)。
+
+  - id: TC-OUT-PROC-LOOKPATH
+    requirement: REQ-OUT-TOOL-ENV
+    behavior: LookPath は 宣言した program の path を返し 宣言に無い名前は ErrUndeclaredProgram。
+    input: 宣言の programs・引く名前 (real は test が作った実行 file を path で宣言)
+    expect: 宣言に在る名前は path。無い名前は ErrUndeclaredProgram。mock は 渡した path。
+
   - id: TC-OUT-ENV-MOCK
     requirement: REQ-OUT-MOCK
     behavior: mock の Env は 渡した表の値だけを返す。
