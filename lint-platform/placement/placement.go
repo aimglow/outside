@@ -207,17 +207,23 @@ type File struct {
 	Content []byte
 }
 
-// Finding は 置き場の外に在る 印つきの test。
+// Finding は 置き場の外に在る 本物の外部に触れる test の 1 件。
+// Name が空 = integration の印 (marks)。Name が在る = 本物の口を使う所 (real_use、Line はその行)。
 type Finding struct {
 	Path    string
+	Line    int
 	Runtime string
+	Name    string
 }
 
 func (f Finding) String() string {
-	return f.Path + ": " + f.Runtime + " の integration の test は 置き場 (libs/platform/** と adapter_dirs) の外 (test-classification.md §4)"
+	if f.Name == "" {
+		return f.Path + ": " + f.Runtime + " の integration の test は 置き場 (libs/platform/** と adapter_dirs) の外 (test-classification.md §4)"
+	}
+	return fmt.Sprintf("%s:%d: %s の test が 本物の口 %s を使う (置き場の外。test-classification.md §4)", f.Path, f.Line, f.Runtime, f.Name)
 }
 
-// Unknown は 印を読み切れなかった 1 件 (判定不能)。
+// Unknown は 読み切れなかった 1 件 (判定不能)。
 type Unknown struct {
 	Path   string
 	Reason string
@@ -225,43 +231,59 @@ type Unknown struct {
 
 func (u Unknown) String() string { return u.Path + ": " + u.Reason }
 
-// Result は 違反 (置き場の外の 印つきの test) と 判定不能。
+// Result は 違反 (置き場の外の 本物の外部に触れる test) と 判定不能。
 type Result struct {
 	Violations []Finding
 	Unknowns   []Unknown
 }
 
-// Check は file の一覧を 規則に照らす。歩かない dir の下・印を持ちえない名前・置き場の中の物は 見ない。結果は path の順。
+// Check は file の一覧を 2 つの判定 (marks・real_use) に掛ける。
+// files = 置き場の外の test の file と 置き場の中の adapters の本物の file と go.mod・pubspec.yaml (他の file は 見ずに飛ばす)。
+// 歩かない dir の下・置き場の中の test は 見ない。結果は path・行・名前の順。
 func Check(files []File, d Decl) Result {
-	var r Result
+	a, unknowns := collectAdapters(files, d)
+	r := Result{Unknowns: unknowns}
 	for _, f := range files {
 		rel := path.Clean(filepath.ToSlash(f.Path))
 		if skipped(rel) || Allowed(rel, d) {
 			continue
 		}
-		rt, ok := Candidate(rel)
+		if rt, ok := Candidate(rel); ok {
+			marked, err := Marked(rt, f.Content)
+			if err != nil {
+				r.Unknowns = append(r.Unknowns, Unknown{rel, err.Error()})
+			} else if marked {
+				r.Violations = append(r.Violations, Finding{Path: rel, Runtime: rt})
+			}
+		}
+		rt, ok := TestFile(rel)
 		if !ok {
 			continue
 		}
-		marked, err := Marked(rt, f.Content)
-		if err != nil {
-			r.Unknowns = append(r.Unknowns, Unknown{rel, err.Error()})
-			continue
-		}
-		if marked {
-			r.Violations = append(r.Violations, Finding{rel, rt})
+		switch rt {
+		case "go":
+			fs, err := goRealUse(rel, f.Content, a)
+			if err != nil {
+				r.Unknowns = append(r.Unknowns, Unknown{rel, "Go として読めない: " + err.Error()})
+			}
+			r.Violations = append(r.Violations, fs...)
+		case "ts":
+			r.Violations = append(r.Violations, tsRealUse(rel, f.Content, a)...)
+		case "dart":
+			r.Violations = append(r.Violations, dartRealUse(rel, f.Content, a)...)
 		}
 	}
-	slices.SortFunc(r.Violations, func(a, b Finding) int { return strings.Compare(a.Path, b.Path) })
-	slices.SortFunc(r.Unknowns, func(a, b Unknown) int { return strings.Compare(a.Path, b.Path) })
+	slices.SortFunc(r.Violations, func(a, b Finding) int {
+		if c := strings.Compare(a.Path, b.Path); c != 0 {
+			return c
+		}
+		if a.Line != b.Line {
+			return a.Line - b.Line
+		}
+		return strings.Compare(a.Name, b.Name)
+	})
+	r.Violations = slices.Compact(r.Violations)
+	slices.SortFunc(r.Unknowns, func(a, b Unknown) int { return strings.Compare(a.Path+a.Reason, b.Path+b.Reason) })
+	r.Unknowns = slices.Compact(r.Unknowns)
 	return r
-}
-
-// NeedsContent は main が 中身を読む要る file か (歩かない dir の外・置き場の外・名前が印を持ちうる)。
-func NeedsContent(rel string, d Decl) bool {
-	if skipped(rel) || Allowed(rel, d) {
-		return false
-	}
-	_, ok := Candidate(rel)
-	return ok
 }

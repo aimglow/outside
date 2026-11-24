@@ -178,3 +178,39 @@ func TestCheck_AcceptsAdapterDirs(t *testing.T) {
 		t.Errorf("知らない key: exit = %d want 3", code)
 	}
 }
+
+// TC-OUT-LINT-PLATFORM-TESTS (本物の口の分を main の tests で回す)
+func TestTests_RealUse_TC_OUT_LINT_PLATFORM_TESTS(t *testing.T) {
+	repo := testDir(t)
+	tree(t, repo, map[string]string{
+		"go.mod": "module example.com/proj\n",
+		"libs/platform/db-postgres-go/adapter_real.go": "package dbpostgres\n\ntype Real struct{}\n",
+		"libs/platform/db-postgres-go/adapter_mock.go": "package dbpostgres\n\ntype Mock struct{}\n",
+		"libs/platform/db-postgres-go/real_test.go":    "package dbpostgres\n\nimport \"github.com/aimglow/outside/go\"\n\nvar p = outside.NewProc(nil)\n",
+		"libs/platform/http-fetch-next/src/real.ts":    "export class Real {}\n",
+		"tools/x/a_test.go":                            "package x\n\nimport \"github.com/aimglow/outside/go\"\n\nvar p = outside.NewProc(nil)\n",
+		"apps/web/b.spec.ts":                           "import { createRealSet as rs } from '@aimglow/outside-next';\n",
+		"apps/mobile/test/c2_test.dart":                "import 'package:outside/outside.dart';\n\nfinal h = RealHttp();\n",
+		"tools/y/d_test.go":                            "package y\n\nimport \"example.com/proj/libs/platform/db-postgres-go\"\n\nvar r = dbpostgres.Real{}\n",
+		"apps/web/e.spec.ts":                           "import { Real } from './real';\n",
+		"tools/x/m_test.go":                            "package x\n\nimport \"github.com/aimglow/outside/go/outsidemock\"\n\nvar p = outsidemock.NewProc(nil)\n",
+		"tools/y/m_test.go":                            "package y\n\nimport \"example.com/proj/libs/platform/db-postgres-go\"\n\nvar m = dbpostgres.Mock{}\n",
+		"apps/web/m.spec.ts":                           "import { createMockSet } from '@aimglow/outside-next/mock';\n",
+		"apps/mobile/test/m_test.dart":                 "import 'package:outside/mock.dart';\n\nfinal h = MockHttp();\n",
+		"libs/outside/go/x_test.go":                    "package outside\n\nvar p = NewProc(nil)\n",
+	})
+	code, out, errOut := runCmd(t, "tests", "--repo", repo)
+	if code != 1 {
+		t.Fatalf("exit = %d want 1\n%s%s", code, out, errOut)
+	}
+	want := []string{
+		"違反 apps/mobile/test/c2_test.dart:3: dart の test が 本物の口 RealHttp を使う (置き場の外。test-classification.md §4)",
+		"違反 apps/web/b.spec.ts:1: ts の test が 本物の口 createRealSet を使う (置き場の外。test-classification.md §4)",
+		"違反 apps/web/e.spec.ts:1: ts の test が 本物の口 ./real を使う (置き場の外。test-classification.md §4)",
+		"違反 tools/x/a_test.go:5: go の test が 本物の口 outside.NewProc を使う (置き場の外。test-classification.md §4)",
+		"違反 tools/y/d_test.go:5: go の test が 本物の口 dbpostgres.Real を使う (置き場の外。test-classification.md §4)",
+	}
+	if got := strings.Split(strings.TrimSpace(out), "\n"); !slices.Equal(got, want) {
+		t.Errorf("出力 =\n%s\nwant\n%s", out, strings.Join(want, "\n"))
+	}
+}

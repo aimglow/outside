@@ -16,7 +16,7 @@ func decl(t *testing.T, dirs ...string) Decl {
 
 const goInteg = "//go:build integration\n\npackage x\n"
 
-// TC-OUT-LINT-PLATFORM-TESTS (spec の input の全部)
+// TC-OUT-LINT-PLATFORM-TESTS (spec の input の 印の分)
 func TestCheck_TC_OUT_LINT_PLATFORM_TESTS(t *testing.T) {
 	files := []File{
 		{"libs/platform/db-postgres-go/x_test.go", []byte(goInteg)},
@@ -34,9 +34,9 @@ func TestCheck_TC_OUT_LINT_PLATFORM_TESTS(t *testing.T) {
 	}
 	r := Check(files, decl(t, "tools/legacy"))
 	want := []Finding{
-		{"apps/mobile/test/c_test.dart", "dart"},
-		{"apps/web/a.integration.spec.ts", "ts"},
-		{"tools/dbgate/db_test.go", "go"},
+		{Path: "apps/mobile/test/c_test.dart", Runtime: "dart"},
+		{Path: "apps/web/a.integration.spec.ts", Runtime: "ts"},
+		{Path: "tools/dbgate/db_test.go", Runtime: "go"},
 	}
 	if !reflect.DeepEqual(r.Violations, want) || len(r.Unknowns) != 0 {
 		t.Errorf("違反 = %v 判定不能 = %v\nwant %v", r.Violations, r.Unknowns, want)

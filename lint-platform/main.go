@@ -6,7 +6,7 @@
 //
 // exit = 0 違反なし (警告は出すが止めない) / 1 違反あり・作れない名前 / 3 読めない (判定不能)。
 // --vocab の file が無ければ 宣言なし (共通の語だけ・adapter_dirs なし) で検査する (在るのに読めない時は 3)。
-// tests は integration の印を持つ test が 置き場 (libs/platform/** と adapter_dirs) の外に在れば落とす (lint.platform.tests)。
+// tests は 置き場 (libs/platform/** と adapter_dirs) の外に integration の印を持つ test か 本物の口を使う test が在れば落とす (lint.platform.tests)。
 package main
 
 import (
@@ -198,7 +198,7 @@ func scaffold(root string, v naming.Vocab, rest []string, stdout, stderr io.Writ
 	return 0
 }
 
-// tests は repo の木を歩き integration の印を持つ test が 置き場の外に在れば名指す。
+// tests は repo の木を歩き 置き場の外の test が integration の印を持つか 本物の口を使えば名指す (marks・real_use)。
 // 歩かない dir (placement.SkipDir) と symlink の dir は 辿らない。印を読むのに要る file が読めなければ 判定不能 (path を名乗る)。
 func tests(repo string, d placement.Decl, stdout, stderr io.Writer) int {
 	files, unreadable, err := walk(repo, d)
@@ -222,7 +222,7 @@ func tests(repo string, d placement.Decl, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "lint-platform tests: 違反 %d 件\n", len(r.Violations))
 		return 1
 	}
-	fmt.Fprintf(stdout, "lint-platform tests: %s の 置き場の外で 印を読んだ test %d 件 違反なし (置き場 = libs/platform/** と adapter_dirs %v)\n", repo, len(files), d.AdapterDirs())
+	fmt.Fprintf(stdout, "lint-platform tests: %s の 読んだ file %d 件 違反なし (置き場 = libs/platform/** と adapter_dirs %v)\n", repo, len(files), d.AdapterDirs())
 	return 0
 }
 
