@@ -202,3 +202,7 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
   - adapters 層に置くのは real が外 (通信・file・子 process・機体の値) を触る lib だけ。外を触らない部品 (形式の変換・計算・集計) は 業務の側の lib に置く (mock を作らず そのまま test する)。触る部分と触らない部分を持つ物は 触る部分だけを切り出す (adapters.md §0)。
 - docs: architecture.md・adapters.md の lib の名前の例を lint-platform の規則に通る形 (db-postgres-go・vcs-git-go・container-podman-go・authn-cookie-next 等) に直した (規則の正本は rules.go)。adapters.md §0 に 上の 2 つの決めを足した。
 - 利用する側がやる事: lint-platform を v0.3.0 に上げると 6 つの語を outside-platform.toml から外せる (宣言に残しても誤りではない)。docs は docs/v0.10.0。
+
+## docs/v0.10.1 (2026-11-25)
+
+- docs: enforcement.md・non-deterministic.md に残っていた 古い lib の名前 (adapters/auth-cookie・adapters/llm-gateway) を 規則に通る形の例へ直した (文の直しだけ)。

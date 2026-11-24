@@ -51,7 +51,7 @@
 | :--- | :--- | :--- |
 | **DB の暗黙値**<br>(`DEFAULT CURRENT_TIMESTAMP`, `SERIAL`) | SQL 側で現在時刻や連番を自動採番すると、アプリ側の時計を固定していても DB 側の値が変動する。 | タイムスタンプや ID はアプリ層で `outside`（`Clock`, `IdGen`）を用いて生成し、明示的に `INSERT` する。 |
 | **DNS 解決・`localhost` 揺れ** | 環境によって `localhost` が `127.0.0.1` と `::1` のどちらに解決されるか異なり、接続エラーやログ不一致が起きる。 | Unit テストでは実ネットワーク通信を禁止し、`HttpClient` / `Adapter` の `Mock` でレスポンスを返す。 |
-| **外部 HTTP / LLM API** | 外部 API や LLM の応答は非決定的であり、ネットワーク遅延・レート制限・課金が発生する。 | `outside` の汎用 `Http` または `adapters/llm-gateway` の `Mock` で固定応答スタブを返す。 |
+| **外部 HTTP / LLM API** | 外部 API や LLM の応答は非決定的であり、ネットワーク遅延・レート制限・課金が発生する。 | `outside` の汎用 `Http` または adapters 層の LLM の lib (名前は `<機能>-<依存先>-<runtime>`) の `Mock` で固定応答スタブを返す。 |
 
 ---
 
@@ -60,5 +60,5 @@
 | 非決定要素 | 具体的な問題・キャッシュが外れる原因 | `outside` / `adapters` での解決策 |
 | :--- | :--- | :--- |
 | **端末・ブラウザストレージ**<br>(`localStorage`, `SharedPreferences`, `SecureStorage`) | 前のテストの保存データが残存したり、実機 Keychain へのアクセスでエラーになる。 | Angular は `outside/angular` のインメモリ `Storage`、Flutter は `adapters/kv-storage` の `Mock` を使用する。 |
-| **Next.js サーバー境界**<br>(`cookies()`, `headers()`, `draftMode()`) | リクエストコンテキスト外で呼ぶとエラーになり、実リクエスト状態に依存する。 | Route Handler / Server Action で値を抽出し、純粋な UseCase 関数へ値または `adapters/auth-cookie` 経由で渡す。 |
+| **Next.js サーバー境界**<br>(`cookies()`, `headers()`, `draftMode()`) | リクエストコンテキスト外で呼ぶとエラーになり、実リクエスト状態に依存する。 | Route Handler / Server Action で値を抽出し、純粋な UseCase 関数へ値または adapters 層の `authn-cookie-next` 経由で渡す。 |
 | **端末環境値・OS 権限**<br>(`UserAgent`, 画面サイズ, カメラ/通知権限) | 実行ブラウザやエミュレータ環境によって値が変わり、分岐結果が揺れる。 | `adapters/device-info` や `adapters/permission` に切り出し、テストでは固定スペック・固定権限状態を注入する。 |

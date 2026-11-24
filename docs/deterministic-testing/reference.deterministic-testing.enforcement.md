@@ -75,7 +75,7 @@ AI エージェントに規約を守らせる最大の鍵は、プロンプト�
           { name: 'node:child_process', message: 'out.exec を使用してください' },
           { name: 'os', message: '環境依存になるため禁止です' },
           { name: 'node:os', message: '環境依存になるため禁止です' },
-          { name: 'next/headers', message: 'adapters/auth-cookie 等を経由してください' },
+          { name: 'next/headers', message: 'adapters 層 (例 libs/platform/authn-cookie-next) を経由してください' },
         ],
       },
     ],
