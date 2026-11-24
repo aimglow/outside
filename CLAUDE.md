@@ -1,7 +1,7 @@
 # outside の規約 (CC セッション向け)
 
 outside は 全 project が module として取り込む共通部品である。application とツールが 外
-(時計・環境変数・file・git・子 process・作業場・通信・保存) を触る場所を この部品 1 つに限る。
+(時計・環境変数・file・子 process・作業場・機体の値・ID・通信・保存) を触る場所を この部品 1 つに限る。
 設計の正本 = `docs/developer/design.outside.yaml`、テスト仕様 = `docs/developer/spec.outside.yaml`。
 
 ## git の流れ

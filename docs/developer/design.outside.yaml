@@ -5,14 +5,14 @@ owner: aimglow
 repo: github.com/aimglow/outside
 
 purpose: >
-  application とツールが 外 (時計・環境変数・file・git・子 process・作業場・通信・保存) を触る場所を
+  application とツールが 外 (時計・環境変数・file・子 process・作業場・機体の値・ID・通信・保存) を触る場所を
   この部品 1 つに限る。処理の中身は 値を受けて値を返す形になり、test は 口に mock を渡すだけで
   結果が決まる。機体が変わっても・日付が変わっても 同じ入力なら同じ結果になる。
 
 scope:
   in:
     - 全 project (ccark / amatelas / kifune / daikokuten / demaetei) の BE・ツール・FE・mobile
-    - Go の module、TypeScript の library (Nx・Next.js・Angular)、Dart の package (Flutter。iOS と Android の両方に対応する UI を作るのが目的)
+    - Go の module、TypeScript の library (next = Node と Next.js 向け・angular = browser 向け。runtime ごとに別の部品)、Dart の package (flutter。iOS と Android の両方に対応する UI を作るのが目的)
     - 各 stack の lint の設定 (外を直に呼ぶ code を build で落とす)
   out:
     - Flutter の web (作らない。web は Angular で作る。Dart の package は web の build に対応しない)
@@ -20,7 +20,7 @@ scope:
     - project 固有の業務の処理
 
 terms:
-  outside: 処理の入力として宣言されていない物。時計・環境変数・file system・git・子 process・機体の値・通信・browser の保存。
+  outside: 処理の入力として宣言されていない物。時計・環境変数・file system・子 process・機体の値・ID と乱数・通信・browser の保存。
   port: outside を触るための口。1 種類の外につき 1 つ。
   real: port の本物の実装。この部品の中だけに在る。
   mock: port の test 用の実装。渡した値だけで振る舞いが決まる。
@@ -53,7 +53,7 @@ requirements:
       空の dir は 末尾 / の path で書く)。disk に木を作らない。絶対 path と 根の外へ出る path の宣言は 誤り。
       複数の test が使う木は test の code の中の 名前つきの値として置く。
       大きい中身は 言語の埋め込み (Go の embed 等) で package の source として持ち test の時に disk を探さない。
-      宣言の形は Go・TypeScript・Dart で同じ。 mock の Git の 追跡下の一覧と差分も 同じく値で宣言する。
+      宣言の形は Go・TypeScript・Dart で同じ。
   - id: REQ-OUT-TOOL-ENV
     text: >
       ツールは 入口で tool-environment の宣言を確かめる。宣言に合わない環境では
@@ -69,6 +69,15 @@ requirements:
     text: secret の値を 作業場へ複製しない。secret を読む口は 値を返すだけで 置き場を作らない。
   - id: REQ-OUT-PARITY
     text: port の名前と意味は Go・TypeScript・Dart で同じ。この設計書の ports の節が唯一の定義。
+  - id: REQ-OUT-NO-TOOL-NAME
+    text: >
+      特定のツール (git・docker・ffmpeg 等) の名前を持つ口・method・引数の組み立てを この部品に置かない。
+      ツールは Proc で起こし 引数の組み立ては 各 project の adapters 層 (例 libs/platform/vcs-git-go) が持つ。
+  - id: REQ-OUT-RUNTIME-DEPS
+    text: >
+      部品は runtime の標準の外に依存を持たない。go = 標準と github.com/BurntSushi/toml。
+      next = node:* の標準 module。angular = browser の標準の Web API (Node の module も @angular/* も持たない)。
+      flutter = dart:* (package:flutter も plugin も持たない)。test だけが使う依存は 別 (devDependencies・dev_dependencies)。
   - id: REQ-OUT-COMPONENT
     text: >
       版は 部品 (components の表の 1 行) ごとに独立に出す。project は 部品ごとに 版を選んで取り込む
@@ -105,11 +114,6 @@ ports:
       methods: [ReadFile, WriteFile, ReadDir, Stat, Remove]
       rule: 根の外の path は 誤り。IOFS(FS) は io/fs.FS として読ませる (io/fs を受ける値の関数へ渡す)。
       mock: memory の上の木。
-    - name: Git
-      does: 宣言した木の git の問いに答える (head の sha・追跡下の一覧・merge-base・差分の file・ref の sha・ある rev の木の一覧と中身)。
-      methods: [Head, ListFiles, MergeBase, DiffNames, IsAncestor, Resolve, ListAt, ReadAt]
-      rule: ListAt は 無い dir に 空を返す。ReadAt は 無い path に fs.ErrNotExist を返す。根の外の path は 誤り。
-      mock: 渡した値を返す。実の repo を作らない。
     - name: Proc
       does: 宣言した名前の program を起こし 結果を返す。
       methods: [Run]
@@ -120,7 +124,18 @@ ports:
       methods: [New, Path, Cleanup, FS]
       rule: FS は この口が作った作業場にだけ返す。
       mock: memory の上の木。FS も memory の上。
+    - name: SysInfo
+      does: 動いている機体と process の値を返す (host の名前・home の dir・process の番号・標準入力が端末か)。
+      methods: [Hostname, HomeDir, Pid, IsTTY]
+      rule: Hostname と HomeDir は 引けなければ 誤りを返す (空の文字で黙らない)。
+      mock: 渡した値を返す。渡していない値は 誤り (Hostname・HomeDir) か 0・false。
+    - name: IdGen
+      does: 新しい ID を返す。
+      methods: [NewID]
+      rule: real は 呼ぶたびに違う ID (UUID v4 の形、乱数は crypto の物) を返す。
+      mock: id-0001・id-0002 … と 呼んだ順に決まった ID を返す。
   frontend_and_mobile:
+    # 部品 next・angular・flutter が 同じ組を持つ。runtime ごとの違いは real の取り先だけ (runtime の節)。
     - name: Clock
       does: 今の時刻を返す。timer を掛ける。
       methods: [now, setTimeout, clearTimeout]
@@ -137,6 +152,15 @@ ports:
       does: build 時と実行時の設定の値を返す。
       methods: [get]
       mock: 渡した表だけを返す。
+    - name: IdGen
+      does: 新しい ID を返す。
+      methods: [newId]
+      rule: real は 呼ぶたびに違う ID (UUID v4 の形、乱数は crypto の物) を返す。
+      mock: id-0001・id-0002 … と 呼んだ順に決まった ID を返す。
+  runtime:
+    next: Node と Next.js の server・client。Config の real は 渡した値の表 → process.env の順に引く。Storage の real は 使う時に localStorage・sessionStorage を取る (server では 渡した Web Storage の形を使う)。
+    angular: browser。Config の real は 渡した値の表だけを引く (process を見ない)。DI の token は 各 project の adapters 層が持つ (@angular/core に依存しない)。
+    flutter: iOS と Android。Http の real は dart:io の HttpClient。Config の real は 渡した値の表 → 環境変数の順。Storage の real は 保存先を渡して使う (端末の保存の plugin は adapters 層が持つ)。
 
 tool_entry:
   name: RunTool
@@ -150,7 +174,7 @@ tool_entry:
     format: TOML
     file: outside.toml (ツールの dir)
     fields:
-      requires_git_worktree: bool
+      requires_git_worktree: bool (宣言の dir から上へ .git を探して確かめる。git の program は起こさない)
       programs: 名前と版の表
       workdir_root: 作業場の置き場 (repo の中の相対 path か $NAME か $NAME/<相対 path>。相対 path は 外へ出ない)
       env: 読んでよい環境変数の名前の一覧
@@ -196,12 +220,14 @@ lint:
     tool: golangci-lint 2.x (forbidigo)
     config: lint-go/golangci.yml (利用する project が取り込む)
     forbid: [time.Now, time.Since, time.Until, time.Sleep, time.After, time.Tick, time.NewTimer, time.NewTicker,
-             os.Getenv, os.LookupEnv, os.Environ, os.Setenv, os.Unsetenv, os.Hostname,
+             os.Getenv, os.LookupEnv, os.Environ, os.Setenv, os.Unsetenv,
+             os.Hostname, os.Getpid, os.Getppid, os.Getwd, os.UserHomeDir, os.UserConfigDir, os.UserCacheDir,
+             "math/rand.*", "math/rand/v2.*", "crypto/rand.*",
              exec.Command, exec.CommandContext, exec.LookPath,
              os.TempDir, os.MkdirTemp, os.CreateTemp,
              os.ReadFile, os.WriteFile, os.Open, os.OpenFile, os.Create, os.ReadDir, os.Stat, os.Lstat,
              os.Remove, os.RemoveAll, os.Mkdir, os.MkdirAll, os.Rename]
-    except: この部品の real (利用する project では outside は依存の module なので lint の対象に入らない)
+    except: この部品の real。除外の宣言 (exclude-rules) は 取り込む project の側の設定 (enforcement.md §3) が持ち この設定には入れない。
   typescript:
     tool: ESLint (no-restricted-syntax・no-restricted-globals・no-restricted-properties・no-restricted-imports)
     config: lint-ts/eslint.config.js (flat config の配列。project の eslint.config.js が取り込んで足す)
@@ -259,3 +285,4 @@ open:
   - sync-outside.sh 自身の版の配り方 (今は 各 project が main から写し CHANGELOG の scripts の項で写し直す)
   - 部品の間に 版の前提 (例 lint-go が go の新しい口の名前を前提にする) が生じたら その時に 前提を宣言する形を決める
   - Go の FS の method の最小の組 (足りない物は MINOR で足す)
+  - next の Node 向けの FS・Proc・Env (今の next は frontend_and_mobile の組だけ。Node の server の処理が要る project が出たら backend_and_tools の組を TypeScript で足す)

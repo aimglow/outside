@@ -7,6 +7,7 @@ note: >
   観点は 要件ごとに 確かめる振る舞い・渡す入力・ mock にする物 を書く。
   この部品の real の test だけが 実物 (実の時計・実の file・実の git) を触る。その時も
   test が自分で作った物だけを触り 機体に元から在る物を読まない。
+  TypeScript の case は 部品 next と angular の両方で、Dart の case は 部品 flutter で 確かめる。
 
 cases:
   - id: TC-OUT-CLOCK-MOCK
@@ -29,11 +30,29 @@ cases:
     mocks: mock の FS
     expect: 根の中は読める。外へ出る path は 誤り (読まない)。
 
-  - id: TC-OUT-GIT-MOCK
+  - id: TC-OUT-SYSINFO-MOCK
     requirement: REQ-OUT-MOCK
-    behavior: mock の Git は 渡した head・一覧・差分を返す。repo を作らない。
-    input: head の sha・追跡下の一覧・差分の file
-    expect: 返る値が入力に一致する。file system に何も作られない。
+    behavior: mock の SysInfo は 渡した値だけを返す。渡していない Hostname・HomeDir は 誤り。
+    input: host の名前・home の dir・process の番号・端末か の値 / 何も渡さない mock
+    expect: 返る値が入力に一致する。何も渡さない mock の Hostname・HomeDir は 誤り、Pid は 0、IsTTY は false。機体の値は 結果に現れない。
+
+  - id: TC-OUT-IDGEN-MOCK
+    requirement: REQ-OUT-MOCK
+    behavior: mock の IdGen は id-0001 から 呼んだ順に決まった ID を返す。mock ごとに 1 から始まる。
+    input: 2 つの mock・それぞれで NewID (newId) を呼ぶ回数
+    expect: 1 つ目の mock は id-0001・id-0002・id-0003。2 つ目の mock は id-0001 から始まる。
+
+  - id: TC-OUT-NO-TOOL-NAME
+    requirement: REQ-OUT-NO-TOOL-NAME
+    behavior: Go の部品は 特定のツールの名前の口を持たず git の program を起こさない (requires_git_worktree は .git を探して確かめる)。
+    input: go の部品の公開の名前の一覧・.git を持つ dir と持たない dir (test が作る) の宣言
+    expect: 公開の名前に Git が無い。.git が在る木では 合格、無い木では git の木が足りないと名乗る。PATH に git が無くても 結果が同じ。
+
+  - id: TC-OUT-RUNTIME-DEPS
+    requirement: REQ-OUT-RUNTIME-DEPS
+    behavior: 部品の依存の宣言が runtime の標準の外を持たない。
+    input: go/go.mod・next/package.json・angular/package.json・flutter/pubspec.yaml の dependencies と source の import
+    expect: go は 標準と BurntSushi/toml だけ。next は dependencies が空で import は node:* と 相対だけ。angular は dependencies が空で import は 相対だけ。flutter は dependencies が空で import は dart:* と package:outside だけ。
 
   - id: TC-OUT-PROC-DECLARED
     requirement: REQ-OUT-TOOL-ENV
@@ -78,7 +97,8 @@ cases:
     requirement: REQ-OUT-CONTRACT
     behavior: 口ごとの契約の test を real と mock の両方に掛け 両方が通る。
     input: 口ごとの契約 (例 Clock = Now は戻らない / FS = 書いた中身が読める・根の外は誤り / Env = 無い名前は 無い /
-      Git = Resolve が ref を sha に引く・ListAt が rev の木の直下を返し 無い dir は空・ReadAt が rev の中身を返し 無い path は fs.ErrNotExist /
+      SysInfo = Hostname と HomeDir は 空でない値か 誤り・Pid は 正の数 (mock は 渡した値) /
+      IdGen = 続けて呼んだ ID は 互いに違い 空でない /
       Proc = Stdin が子 process の標準入力に届き 無ければ空 /
       Workdir = 作った作業場の FS に書けて読め 根の外は誤り・作っていない作業場の FS は誤り)
     note: real に掛ける時は test が自分で作った物 (自分で作った dir・自分で起こした子 process) だけを触る。
@@ -92,9 +112,9 @@ cases:
 
   - id: TC-OUT-LINT-GO
     requirement: REQ-OUT-LINT
-    behavior: lint の設定は 部品の外で time.Now を呼ぶ code を落とし 部品の中の同じ呼び出しを通す。
-    input: 部品の外の package で time.Now を呼ぶ source・部品の real で呼ぶ source
-    expect: 前者は lint が誤りを出す。後者は 通る。
+    behavior: lint の設定は 外を直に呼ぶ code (時計・環境変数・機体と process の値 (Hostname・Getpid・UserHomeDir 等)・乱数 (math/rand・math/rand/v2・crypto/rand)・子 process・file) を落とし 口を通す code を通す。
+    input: lint-go/testdata/bad (禁じた呼び出しの種類ごとに 1 つ以上) と testdata/good (口を受け取る code)
+    expect: bad は 禁じた呼び出しが 全部 名指される (種類ごとに 期待の行と一致)。good は 誤り 0。
 
   - id: TC-OUT-LINT-TS
     requirement: REQ-OUT-LINT
@@ -110,9 +130,9 @@ cases:
 
   - id: TC-OUT-PARITY
     requirement: REQ-OUT-PARITY
-    behavior: Go・TypeScript・Dart の port と method の名前の組が 設計書の ports の節と一致する。
-    input: 設計書の ports の節・各言語の公開の名前の一覧
-    expect: 3 つの言語とも 設計書と同じ組。食い違いは 名前を出して 誤り。
+    behavior: 各部品の port と method の名前の組が 設計書の ports の節と一致する (go = backend_and_tools、next・angular・flutter = frontend_and_mobile)。
+    input: 設計書の ports の節・各部品の公開の名前の一覧
+    expect: 4 つの部品とも 設計書と同じ組。食い違いは 名前を出して 誤り。
 
   - id: TC-OUT-LINT-PLATFORM
     requirement: REQ-OUT-PLATFORM-LAYOUT
