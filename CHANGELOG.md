@@ -54,3 +54,11 @@
 
 利用する project がやる事: go.mod の outside を v0.5.0 に上げ、lint の module を `lint/go/v0.5.0` で取る。kifune は tools/internal/iofs を `outside.IOFS` に置き換える。
 
+
+## v0.6.0 (2026-11-24)
+
+足した: adapters 層 (`libs/platform`) の 名前と構成の検査 `lint/naming` (module `github.com/aimglow/outside/lint/naming`)。
+規則の正本 = `lint/naming/naming/rules.go`。見る事 = 直下の dir 名が `<機能>-<依存先>-<runtime>` か・runtime ごとの 3 file (interface / real / mock) が直下か src・lib に在るか・lib の直下に src・lib・test・testdata 以外の dir が無いか・直下に dir 以外の file が無いか。
+exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
+
+利用する project がやる事: `.ccark-prepush.toml` に 1 段として宣言する。run = `go run github.com/aimglow/outside/lint/naming@v0.6.0 --root libs/platform`、reads = `libs/platform/**`。各 project で この検査を書かない。
