@@ -117,6 +117,13 @@ type IdGen interface {
 	NewID() string
 }
 
+// Random は 暗号に使う乱数の byte 列を返す (鍵・nonce・token)。io.Reader と同じ形 = crypto の API へ そのまま渡せる。
+// 鍵の生成のうち 渡した読み手を無視する物 (Go 1.26 の crypto/ecdh の GenerateKey 等) は Random で読んだ byte から作る。
+type Random interface {
+	// Read は p を埋めて 埋めた数を返す。
+	Read(p []byte) (n int, err error)
+}
+
 // Cmd は 起こす program と その引数。
 type Cmd struct {
 	Name string
@@ -166,4 +173,5 @@ type Set struct {
 	Workdir Workdir
 	SysInfo SysInfo
 	IdGen   IdGen
+	Random  Random
 }

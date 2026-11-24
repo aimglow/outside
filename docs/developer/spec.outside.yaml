@@ -61,6 +61,12 @@ cases:
     input: 2 つの mock・それぞれで NewID (newId) を呼ぶ回数
     expect: 1 つ目の mock は id-0001・id-0002・id-0003。2 つ目の mock は id-0001 から始まる。
 
+  - id: TC-OUT-RANDOM-MOCK
+    requirement: REQ-OUT-MOCK
+    behavior: mock の Random は 種と呼び順だけで byte 列が決まり 読んだ長さを記録し WithErr の後は 誤りを返す。
+    input: 同じ種の 2 つの mock に同じ長さの順で Read / 違う種 / 1 回で 64 byte と 32 byte を 2 回 / WithErr
+    expect: 同じ種は同じ byte。違う種は違う byte。分けて読んでも 続けて読んでも 同じ列。記録は 読んだ長さの順。WithErr の後は n=0 と その誤り。
+
   - id: TC-OUT-NO-TOOL-NAME
     requirement: REQ-OUT-NO-TOOL-NAME
     behavior: Go の部品は 特定のツールの名前の口を持たず git の program を起こさない (requires_git_worktree は .git を探して確かめる)。
@@ -118,6 +124,7 @@ cases:
     input: 口ごとの契約 (例 Clock = Now は戻らない / FS = 書いた中身が読める・根の外は誤り / Env = 無い名前は 無い /
       SysInfo = Hostname と HomeDir は 空でない値か 誤り・Pid は 正の数 (mock は 渡した値) /
       IdGen = 続けて呼んだ ID は 互いに違い 空でない /
+      Random = Read は p を全部埋め n=len(p)・誤り無し、続けて読んだ 32 byte は 互いに違う /
       Proc = Stdin が子 process の標準入力に届き 無ければ空 /
       Workdir = 作った作業場の FS に書けて読め 根の外は誤り・作っていない作業場の FS は誤り)
     note: real に掛ける時は test が自分で作った物 (自分で作った dir・自分で起こした子 process) だけを触る。

@@ -148,7 +148,13 @@ ports:
       methods: [NewID]
       rule: real は 呼ぶたびに違う ID (UUID v4 の形、乱数は crypto の物) を返す。
       mock: id-0001・id-0002 … と 呼んだ順に決まった ID を返す。
-  frontend_and_mobile:
+    - name: Random
+      does: 暗号に使う乱数の byte 列を返す (鍵・nonce・token)。
+      methods: [Read]
+      rule: >
+        Read は io.Reader と同じ形 (crypto の API へ そのまま渡せる)。real = crypto/rand (p を全部埋め 誤りを返さない)。宣言で絞らない (IdGen と同じ)。
+        Go 1.26 から crypto/ecdh・crypto/rand.Prime 等の鍵の生成は 渡した読み手を無視する ゆえ 鍵を決めたい処理は Random で読んだ byte から作る (例 Curve.NewPrivateKey)。
+      mock: 種 (seed) で決まる byte 列を返す (同じ種・同じ呼び順なら同じ byte)。読んだ長さを記録する。WithErr で 誤りを返させられる。
     # 部品 next・angular・flutter が 同じ組を持つ。runtime ごとの違いは real の取り先だけ (runtime の節)。
     - name: Clock
       does: 今の時刻を返す。timer を掛ける。
@@ -236,7 +242,7 @@ lint:
     forbid: [time.Now, time.Since, time.Until, time.Sleep, time.After, time.Tick, time.NewTimer, time.NewTicker,
              os.Getenv, os.LookupEnv, os.Environ, os.Setenv, os.Unsetenv,
              os.Hostname, os.Getpid, os.Getppid, os.Getwd, os.UserHomeDir, os.UserConfigDir, os.UserCacheDir,
-             "math/rand.*", "math/rand/v2.*", "crypto/rand.*",
+             "math/rand.*", "math/rand/v2.*", crypto/rand.Read, crypto/rand.Reader, crypto/rand.Text, crypto/rand.Prime,
              exec.Command, exec.CommandContext, exec.LookPath,
              os.TempDir, os.MkdirTemp, os.CreateTemp,
              os.ReadFile, os.WriteFile, os.Open, os.OpenFile, os.Create, os.ReadDir, os.Stat, os.Lstat,

@@ -27,4 +27,6 @@ func Bad() {
 	_ = randv2.IntN(3)
 	_, _ = crand.Read(nil)
 	_ = crand.Text()
+	_, _ = crand.Prime(nil, 8)
+	_ = crand.Reader
 }

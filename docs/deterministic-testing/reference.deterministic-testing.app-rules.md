@@ -28,7 +28,7 @@ test を書く前に ccark の `docs/conventions/test-writing.md`（R0〜R7・V1
 | **時刻・タイマー** | `time.Now`, `time.Sleep`, `new Date()`, `Date.now()`, `DateTime.now()` | `libs/outside/{go,next,angular,flutter}` の `Clock` / `now` |
 | **ファイルシステム** | `os.*`, `node:fs`, `dart:io`, `Directory.current`, `os.TempDir` | `libs/outside/{go,next,flutter}` の `Fs`（仮想パス `/virtual/...` のみ使用） |
 | **環境変数** | `os.Getenv`, `process.env`, `Platform.environment` | `libs/outside/{go,next,flutter}` の `Getenv` / `env` |
-| **乱数・ID 生成** | `math/rand`, `crypto/rand`, `Math.random()`, `randomUUID()`, `Random()` | `libs/outside/{go,next,angular,flutter}` の `Id` / `newId` |
+| **乱数・ID 生成** | `math/rand`, `crypto/rand`, `Math.random()`, `randomUUID()`, `Random()` | `libs/outside/{go,next,angular,flutter}` の `IdGen` (`NewID` / `newId`)。暗号の byte 列 (鍵・nonce・token) は go の `Random` |
 | **外部プロセス実行** | `exec.Command`, `child_process`, `Process.run` | `libs/outside/{go,next,flutter}` の `Cmd` / `exec` / `process` |
 | **マシン・プロセス情報** | `os.Getpid`, `os.Hostname`, `os.UserHomeDir`, `process.cwd`, `__dirname` | `libs/outside/go` の `Sys`（他言語では仮想固定値を使用） |
 | **ブラウザ Storage** | `localStorage`, `sessionStorage` | `libs/outside/angular` の `localStorage` / `sessionStorage` |

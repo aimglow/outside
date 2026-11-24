@@ -332,6 +332,31 @@ func TestContract_TC_OUT_CONTRACT_IdGen(t *testing.T) {
 	})
 }
 
+// 契約: Read は p を全部埋め n=len(p)・誤り無し。続けて読んだ 32 byte は 互いに違う。
+func randomContract(t *testing.T, r outside.Random) {
+	t.Helper()
+	seen := map[string]bool{}
+	for range 50 {
+		p := make([]byte, 32)
+		n, err := r.Read(p)
+		if err != nil || n != len(p) {
+			t.Fatalf("Read = %d, %v (want %d, nil)", n, err, len(p))
+		}
+		if seen[string(p)] {
+			t.Fatalf("続けて読んだ 32 byte が 同じ: %x", p)
+		}
+		seen[string(p)] = true
+	}
+	if n, err := r.Read(nil); n != 0 || err != nil {
+		t.Errorf("Read(nil) = %d, %v (want 0, nil)", n, err)
+	}
+}
+
+func TestContract_TC_OUT_CONTRACT_Random(t *testing.T) {
+	t.Run("real", func(t *testing.T) { randomContract(t, outside.NewRandom()) })
+	t.Run("mock", func(t *testing.T) { randomContract(t, outsidemock.NewRandom([]byte("seed"))) })
+}
+
 // 契約: 宣言した helper は 起きて結果が返る。0 以外の exit は Result で返る。宣言に無い名前は 誤り。
 func procContract(t *testing.T, p outside.Proc, prefix []string) {
 	t.Helper()

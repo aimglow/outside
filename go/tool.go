@@ -80,9 +80,10 @@ type Base struct {
 	// FS は 宣言の相対 path の基準 (repo の根) を根とする。
 	FS   FS
 	Proc Proc
-	// SysInfo と IdGen は そのまま Set へ渡る (宣言で絞らない)。
+	// SysInfo・IdGen・Random は そのまま Set へ渡る (宣言で絞らない)。
 	SysInfo SysInfo
 	IdGen   IdGen
+	Random  Random
 	// Worktree は requires_git_worktree の時に git の木の根を返す。nil か 誤りなら git の木が足りないと名乗る。
 	Worktree func() (root string, err error)
 	// Workdir は 置き場を受けて 作業場の口を返す。置き場が無ければ 誤り。
@@ -169,6 +170,7 @@ func RunToolWith(decl Decl, base Base, fn func(Set) error) (err error) {
 		Workdir: wd,
 		SysInfo: base.SysInfo,
 		IdGen:   base.IdGen,
+		Random:  base.Random,
 	}
 	defer func() {
 		if e := wd.Cleanup(); e != nil && err == nil {

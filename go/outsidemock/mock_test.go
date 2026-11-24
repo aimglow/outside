@@ -1,6 +1,7 @@
 package outsidemock_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -390,4 +391,40 @@ func testDir(t *testing.T) string {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir
+}
+
+// TC-OUT-RANDOM-MOCK: 種と呼び順だけで byte 列が決まり 読んだ長さを記録し WithErr の後は 誤りを返す。
+func TestRandomMock_TC_OUT_RANDOM_MOCK(t *testing.T) {
+	read := func(r *outsidemock.Random, n int) []byte {
+		t.Helper()
+		p := make([]byte, n)
+		if got, err := r.Read(p); err != nil || got != n {
+			t.Fatalf("Read = %d, %v", got, err)
+		}
+		return p
+	}
+	a, b := outsidemock.NewRandom([]byte("s1")), outsidemock.NewRandom([]byte("s1"))
+	if x, y := read(a, 48), read(b, 48); !bytes.Equal(x, y) {
+		t.Errorf("同じ種で違う byte: %x / %x", x, y)
+	}
+	if x, y := read(outsidemock.NewRandom([]byte("s1")), 32), read(outsidemock.NewRandom([]byte("s2")), 32); bytes.Equal(x, y) {
+		t.Errorf("違う種で同じ byte: %x", x)
+	}
+	whole := read(outsidemock.NewRandom([]byte("s1")), 64)
+	parts := outsidemock.NewRandom([]byte("s1"))
+	split := append(read(parts, 32), read(parts, 32)...)
+	if !bytes.Equal(whole, split) {
+		t.Errorf("分けて読むと列が変わる: %x / %x", whole, split)
+	}
+	if calls := parts.Calls(); len(calls) != 2 || calls[0].Args[0] != "32" || calls[1].Args[0] != "32" {
+		t.Errorf("記録 = %+v (want Read 32 を 2 回)", calls)
+	}
+	boom := errors.New("boom")
+	e := outsidemock.NewRandom([]byte("s1")).WithErr(boom)
+	if n, err := e.Read(make([]byte, 8)); n != 0 || !errors.Is(err, boom) {
+		t.Errorf("WithErr の後の Read = %d, %v (want 0, boom)", n, err)
+	}
+	if n, err := e.WithErr(nil).Read(make([]byte, 8)); n != 8 || err != nil {
+		t.Errorf("WithErr(nil) の後の Read = %d, %v (want 8, nil)", n, err)
+	}
 }

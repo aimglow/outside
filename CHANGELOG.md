@@ -161,3 +161,11 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 - 足さない: Env の全部の一覧 (Environ)。宣言した名前だけを読ませる絞りを迂回させないため。子 process の環境は Proc (親の環境 + Cmd.Env)。
 
 利用する側がやる事: outside.FS・Clock・Proc を自前で実装している型は 足した method を実装する (outside の mock を使っていれば不要)。`time.NewTimer`・`time.NewTicker`・`time.After`・`os.Open`・`os.OpenFile(O_APPEND)`・`os.MkdirAll`・`os.Lstat`・`os.Rename`・`os.RemoveAll`・`exec.LookPath` を直に呼ぶ所は Set の Clock・FS・Proc へ移す。`time.Since(t)` は `clock.Now().Sub(t)`。
+
+## go/v0.10.0・lint-go/v0.3.0・docs/v0.8.0 (2026-11-25)
+
+- go: 口 Random (`Read(p []byte) (int, error)` = io.Reader と同じ形。crypto の API へ そのまま渡せる) を足した。real = `outside.NewRandom()` (crypto/rand)。mock = `outsidemock.NewRandom(seed)` (同じ種・同じ呼び順なら同じ byte 列。分けて読んでも続けて読んでも同じ列。読んだ長さを記録。`WithErr(err)` で誤りを返させる)。`Set`・`Base` に `Random` (宣言で絞らない)。
+- lint-go: crypto/rand は `Read`・`Reader`・`Text`・`Prime` だけを落とす (→ Random)。`rand.Int` は 読み手を受けるので Random を渡せば通る (今まで落ちていた形を通すだけ = 赤を増やさない)。math/rand・math/rand/v2 は 今までどおり全て落とす (→ IdGen)。
+- docs: enforcement.md §3・app-rules.md・non-deterministic.md の 乱数の受け先を IdGen と Random に分けて書いた。
+- 注意 (Go 1.26): `crypto/ecdh` の `GenerateKey`・`crypto/rand.Prime` 等の鍵の生成は 渡した読み手を無視し 常に安全な乱数を使う (GODEBUG=cryptocustomrand=1 の時だけ使う)。mock の Random を渡しても 鍵は決まらない。鍵を test で決めたい処理は Random で読んだ byte から作る (例 `curve.NewPrivateKey(b)`、X25519 は 32 byte)。
+- 利用する側がやる事: go を v0.10.0・lint-go を v0.3.0 に上げ、crypto/rand.Read・Reader を Set.Random へ、rand.Int(crand.Reader, max) を rand.Int(set.Random, max) へ移す。`Set`・`Base` を自前で組む所は Random を足す。

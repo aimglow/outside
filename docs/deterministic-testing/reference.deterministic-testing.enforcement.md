@@ -119,7 +119,7 @@ AI エージェントに規約を守らせる最大の鍵は、プロンプト�
 
 - 禁じる呼び出しの一覧の正本 = `outside` の部品 `lint-go` の `golangci.yml`（各 project では `libs/outside/lint-go/golangci.yml`）。この文書に一覧を写さない。
   禁じる物 = 時計（`time.Now` 等 → `Clock`）・環境変数（→ `Env`）・機体と process の値（`os.Hostname`・`os.Getpid`・`os.UserHomeDir` 等 → `SysInfo`）・
-  乱数（`math/rand`・`math/rand/v2`・`crypto/rand` → `IdGen`）・子 process（→ `Proc`）・system の一時置き場（→ `Workdir`）・file（→ `FS`）。
+  乱数（`math/rand`・`math/rand/v2` → `IdGen`、`crypto/rand` の `Read`・`Reader`・`Text`・`Prime` → `Random`。`crypto/rand.Int` は 読み手を受けるので `Random` を渡せば通る）・子 process（→ `Proc`）・system の一時置き場（→ `Workdir`）・file（→ `FS`）。
 - 除外は 取り込む project の側の設定に置く（`lint-go` には入れない）。project の `.golangci.yml` は `lint-go` の `forbidigo` の設定を そのまま持ち（`lint-go` を取り込み直したら 合わせる）、除外だけを足す:
 
 ```yaml

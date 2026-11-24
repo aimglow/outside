@@ -20,8 +20,13 @@ linters:
         # (pattern に import path を書いても 当たらない。pkg が無いと 自作の rand という名前の package まで落とす)。
         # 型 (rand.Rand) と その method (r.Intn) も 同じ pattern で当たる。
         - pattern: ^rand\.
-          pkg: ^(math/rand|math/rand/v2|crypto/rand)$
+          pkg: ^(math/rand|math/rand/v2)$
           msg: 乱数と ID は outside の IdGen を通す
+        # crypto/rand は 自分で乱数を取る物だけを落とす。rand.Int は 読み手を受ける (outside の Random を渡せば 決まる) ゆえ 通す。
+        # rand.Prime は 読み手を受けるが Go 1.26 から 無視する ゆえ 落とす。
+        - pattern: ^rand\.(Read|Reader|Text|Prime)$
+          pkg: ^crypto/rand$
+          msg: 暗号の乱数は outside の Random を通す (rand.Int は Random を渡せば通る)
         - pattern: ^exec\.(Command|CommandContext|LookPath)$
           msg: 子 process は outside の Proc を通す
         - pattern: ^os\.(TempDir|MkdirTemp|CreateTemp)$

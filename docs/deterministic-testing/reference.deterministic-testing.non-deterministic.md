@@ -40,7 +40,7 @@
 
 | 非決定要素 | 具体的な問題・キャッシュが外れる原因 | `outside` / `adapters` での解決策 |
 | :--- | :--- | :--- |
-| **UUID / ULID / 乱数 / Nonce**<br>(`uuid.New`, `Math.random`, `crypto/rand`) | セッション ID や台帳レコード ID をランダム生成すると、スナップショット比較やキャッシュキーが毎回不一致になる。 | `outside` の `IdGen`（`NewID()`, `RandomBytes(n)`）を使用。`Mock` では `id-0001`, `id-0002`... と決定論的連番を返す。 |
+| **UUID / ULID / 乱数 / Nonce**<br>(`uuid.New`, `Math.random`, `crypto/rand`) | セッション ID や台帳レコード ID をランダム生成すると、スナップショット比較やキャッシュキーが毎回不一致になる。 | `outside` の `IdGen`（`NewID()`）と 暗号の byte 列は `Random`（`Read`、io.Reader の形）を使用。`Mock` では ID は `id-0001`, `id-0002`... と決定論的連番、`Random` は 種で決まる byte 列を返す。Go 1.26 から 鍵の生成（`crypto/ecdh` の `GenerateKey` 等）は 渡した読み手を無視するので 鍵は `Random` で読んだ byte から作る（`Curve.NewPrivateKey`）。 |
 | **自己署名証明書の期限** | テスト用 TLS 証明書が実時計の経過によりある日突然期限切れになり、全テストが失敗する。 | 証明書検証時刻にも `outside` の `Clock.Now()` を注入し、仮想時刻を証明書の有効期間内に固定する。 |
 
 ---

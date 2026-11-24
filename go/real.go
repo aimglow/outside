@@ -300,6 +300,14 @@ func (realSysInfo) IsTTY() bool {
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
+type realRandom struct{}
+
+// NewRandom は crypto/rand の乱数を返す口を返す。
+func NewRandom() Random { return realRandom{} }
+
+// Read は p を全部埋める (crypto/rand.Read は 誤りを返さない決まり)。
+func (realRandom) Read(p []byte) (int, error) { return rand.Read(p) }
+
 type realIdGen struct{}
 
 // NewIdGen は 呼ぶたびに 違う ID (UUID v4 の形、乱数は crypto/rand) を返す口を返す。
@@ -505,6 +513,7 @@ func RunTool(declPath string, fn func(Set) error) error {
 		Proc:     NewProc(programs),
 		SysInfo:  NewSysInfo(),
 		IdGen:    NewIdGen(),
+		Random:   NewRandom(),
 		Worktree: worktree,
 		Workdir: func(r string) (Workdir, error) {
 			if !filepath.IsAbs(r) {

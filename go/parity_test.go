@@ -19,6 +19,7 @@ var designPorts = map[string][]string{
 	"Workdir": {"New", "Path", "Cleanup", "FS"},
 	"SysInfo": {"Hostname", "HomeDir", "Pid", "IsTTY"},
 	"IdGen":   {"NewID"},
+	"Random":  {"Read"},
 }
 
 func sorted(names []string) []string {
@@ -79,4 +80,5 @@ var (
 	_ outside.Workdir = (*outsidemock.Workdir)(nil)
 	_ outside.SysInfo = (*outsidemock.SysInfo)(nil)
 	_ outside.IdGen   = (*outsidemock.IdGen)(nil)
+	_ outside.Random  = (*outsidemock.Random)(nil)
 )
