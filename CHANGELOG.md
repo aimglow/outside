@@ -183,3 +183,13 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 - go: Proc に `Cmd.KillGroup`・`Cmd.KillGrace` (0 なら 5s)・`Result.Killed`。KillGroup の子は 新しい process group で起き ctx の終わりで group (孫まで) へ SIGTERM、猶予の後に SIGKILL。ctx の終わりで止めた時は KillGroup に依らず `Killed = true` で 誤りは ctx の誤りを包む (`errors.Is(err, context.Canceled)` 等で判る)。unix でない OS の KillGroup は誤り。子が自分で終えたのに孫が pipe を握って残る時は 猶予の後に exec.ErrWaitDelay を包む誤り (Killed = false)。mock は `outsidemock.NewProc(...).WithFunc(name, func(ctx, cmd) (outside.Result, error))` で ctx を受ける子を表せ Cmds() で KillGroup・KillGrace を読める。
 - lint-go: `os.Symlink`・`os.Readlink`・`os.Link` を落とす (→ FS)。今まで通っていた code が落ちうる。
 - 利用する側がやる事: outside.FS を自前で実装している型は Symlink・Readlink を足す。ctx の誤りを `==` で比べる所は `errors.Is` へ。孫まで止めたい子は `Cmd{KillGroup: true, KillGrace: ...}`。lint-go/v0.4.0 は go/v0.11.0 の後に上げる (symlink を FS へ移してから)。
+
+## lint-platform/v0.2.0・docs/v0.9.0 (2026-11-25)
+
+- lint-platform: 検査 `tests` を足した (`go -C libs/outside/lint-platform run . tests --repo ../../..`)。test-classification.md §4 (本物の外部に触れる test は outside と adapters の中だけ) を機械で止める。置いてよい場所 (`libs/platform/**` と `outside-platform.toml` の `adapter_dirs`) の外の test について:
+  - integration の印 (Go の `//go:build integration`・TS の `*.integration.spec.*`・Dart の `@Tags(['integration'])`) を持てば 落とす。
+  - 印に依らず 本物の口を作る物 (outside の `New*`・`RunTool`・`createReal*`・`Real*(…)`・`OutsideSet.real`、adapters の `adapter_real.go`・`src/real.ts`・`adapter_real.dart` が公開する名前) を使えば 行つきで落とす。mock だけの test は通す。
+  - exit 0 / 1 / 3 (判定不能 = 宣言か file が読めない)。kifune #244 の頼み。
+- lint-platform: `outside-platform.toml` に `adapter_dirs` を書ける (check・scaffold・tests が同じ宣言を読む)。`.`・空・絶対 path・根の外は 判定不能。前の版の lint-platform は adapter_dirs を知らない key として 判定不能にする = 宣言を書くのは v0.2.0 を取り込んでから。
+- docs: enforcement.md §4.2 に 検査と段の宣言の形を足した。
+- 利用する側がやる事: lint-platform を v0.2.0 に上げ、push の前の検査に段を 1 つ宣言する (run と reads = enforcement.md §4.2)。libs/platform 以外に adapter の dir が在れば adapter_dirs に書く。違反は 本物の外部に触れる test を libs/platform/<lib> か 宣言した dir へ移すか mock だけで書き直す。

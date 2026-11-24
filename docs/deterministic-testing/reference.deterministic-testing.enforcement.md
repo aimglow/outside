@@ -171,6 +171,17 @@ dart run outside_lint:check apps libs/platform
 - lib を作る = `go -C libs/outside/lint-platform run . scaffold --root ../../platform --vocab ../../../outside-platform.toml <機能> <依存先> <runtime>`（名前が通らなければ何も作らない）。
 - 各 project = push の前の検査に 1 段として宣言する: run = `go -C libs/outside/lint-platform run . check --root ../../platform --vocab ../../../outside-platform.toml`、reads = `libs/platform/**`・`libs/outside/lint-platform/**`・`outside-platform.toml`。違反は push の前と便で赤 = land できない。読む物が変わらなければ 段は前の PASS に当たり 回らない。各 project で この検査を書かない。
 
+## 4.2 本物の外部に触れる test の置き場の検査（`outside` の `lint-platform` の `tests`）
+
+- 決まりの正本 = `reference.deterministic-testing.test-classification.md` §4（本物の外部に触れる test は `outside` と adapters の中だけ。apps・tools には 印を付けても置かない）。この検査は それを機械で止める。
+- 置いてよい場所 = `libs/platform/**` と repo の根の `outside-platform.toml` の `adapter_dirs = ["..."]`（repo の根からの相対 path。`.`・空・絶対 path・根の外は 判定不能）。
+- 落とす物（置いてよい場所の外の test の file）:
+  - integration の印を持つ test（Go = `//go:build` に `integration`、TS = `*.integration.spec.*`・`*.integration.test.*`、Dart = `@Tags([... 'integration' ...])` か `tags:` の `'integration'`）。
+  - 印に依らず 本物の口を作る物を使う test（outside の本物 = Go の `outside.New*`・`RunTool`、TS の `createReal*`、Dart の `Real*(…)`・`OutsideSet.real`。adapters の本物 = `adapter_real.go`・`src/real.ts`・`adapter_real.dart` が公開する名前）。mock だけを使う test は通す。
+- 見えない形（反射・文字列で組む import・動的 import・tsconfig の paths の別名・置き場の外の helper を経由する形）は 書く時の審査が持つ（`design.outside.yaml` の `lint.platform.tests.not_checked`）。
+- 出力 = `違反 <path>[:<行>]: …` / `判定不能 <path>: …`。exit = 0 違反なし / 1 違反あり / 3 読めない（判定不能）。
+- 各 project = push の前の検査に 1 段として宣言する: run = `go -C libs/outside/lint-platform run . tests --repo ../../..`、reads = `**/*_test.go`・`**/*.spec.*`・`**/*.test.*`・`**/*_test.dart`・`libs/platform/**`・`adapter_dirs` の下・`**/go.mod`・`**/pubspec.yaml`・`libs/outside/lint-platform/**`・`outside-platform.toml`。
+
 ## 5. Nx キャッシュ設定の最適化（`nx.json`）
 
 マシン環境の違いで Nx のタスクハッシュが変わるのを防ぐため、`namedInputs` から環境変数依存を排除し、決定論的な入力のみをハッシュ対象にします。

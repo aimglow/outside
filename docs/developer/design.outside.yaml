@@ -323,15 +323,16 @@ lint:
 
 components:
   # name = 版の tag の頭 (<name>/vX.Y.Z) / path = この repo の中の dir / place = 取り込む project の中の置き場
-  - {name: go,            path: go/,                         place: libs/outside/go/}
-  - {name: next,          path: next/,                       place: libs/outside/next/}
-  - {name: angular,       path: angular/,                    place: libs/outside/angular/}
-  - {name: flutter,       path: flutter/,                    place: libs/outside/flutter/}
-  - {name: lint-go,       path: lint-go/,                    place: libs/outside/lint-go/}
-  - {name: lint-ts,       path: lint-ts/,                    place: libs/outside/lint-ts/}
-  - {name: lint-dart,     path: lint-dart/,                  place: libs/outside/lint-dart/}
-  - {name: lint-platform, path: lint-platform/,              place: libs/outside/lint-platform/}
-  - {name: docs,          path: docs/deterministic-testing/, place: docs/deterministic-testing/}
+  table:
+    - {name: go,            path: go/,                         place: libs/outside/go/}
+    - {name: next,          path: next/,                       place: libs/outside/next/}
+    - {name: angular,       path: angular/,                    place: libs/outside/angular/}
+    - {name: flutter,       path: flutter/,                    place: libs/outside/flutter/}
+    - {name: lint-go,       path: lint-go/,                    place: libs/outside/lint-go/}
+    - {name: lint-ts,       path: lint-ts/,                    place: libs/outside/lint-ts/}
+    - {name: lint-dart,     path: lint-dart/,                  place: libs/outside/lint-dart/}
+    - {name: lint-platform, path: lint-platform/,              place: libs/outside/lint-platform/}
+    - {name: docs,          path: docs/deterministic-testing/, place: docs/deterministic-testing/}
   rule:
     - path と place は 部品の名前から決まる (docs だけ 各 project の docs の中に置く。持ち主の決め = 各 project の docs に入れ CLAUDE.md から必読にする)。
       取り込みの script は この対応を 名前から引き 設定の file を読まない。
