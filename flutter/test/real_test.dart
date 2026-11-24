@@ -55,13 +55,14 @@ void main() {
     );
   });
 
-  test('REQ-OUT-REAL-TESTED-HERE RealConfig は 同じ名前なら 実行時の値が勝つ', () {
+  test('REQ-OUT-REAL-TESTED-HERE RealConfig は 渡した値の表 → 環境変数の順に引く (同じ名前なら 渡した値が勝つ)', () {
     final c = RealConfig(
       buildTime: const {'A': 'build', 'B': 'build'},
       runtime: const {'A': 'run'},
     );
-    expect(c.get('A'), 'run');
+    expect(c.get('A'), 'build');
     expect(c.get('B'), 'build');
+    expect(RealConfig(runtime: const {'C': 'run'}).get('C'), 'run');
   });
 
   test('REQ-OUT-INJECT OutsideSet は 渡した口を そのまま持つ', () {

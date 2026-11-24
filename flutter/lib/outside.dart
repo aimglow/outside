@@ -235,7 +235,7 @@ final class RealStorage implements Storage {
   Future<void> remove(String key) => _backend.remove(key);
 }
 
-/// build 時の表と 実行時の環境変数から読む Config。同じ名前は 実行時の値が勝つ。
+/// 渡した値の表 (build 時) → 実行時の環境変数 の順に引く Config。同じ名前は 渡した値が勝つ (設計書 runtime.flutter・next と同じ順)。
 ///
 /// build 時の値は app が const の表で渡す (String.fromEnvironment は const でしか読めない)。
 /// runtime を渡さなければ 機体の環境変数を読む。
@@ -251,7 +251,7 @@ final class RealConfig implements Config {
 
   @override
   String? get(String name) =>
-      (_runtime ?? Platform.environment)[name] ?? _buildTime[name];
+      _buildTime[name] ?? (_runtime ?? Platform.environment)[name];
 }
 
 /// 安全な乱数 (Random.secure) で UUID v4 の形の ID を返す IdGen。
