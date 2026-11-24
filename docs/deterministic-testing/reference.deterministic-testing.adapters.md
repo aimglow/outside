@@ -18,6 +18,7 @@
 | `<依存先>` | 外部の製品・プロトコルの名前（小文字・`-` 区切り。例: `postgres`・`google-iap`・`cloudflare-access`・`git`・`podman`・`atlas`・`buf`・`ssh`・`shared-preferences`）。 |
 | `<runtime>` | `go`・`next`・`angular`・`flutter` のどれか（`outside` の部品と同じ 4 つ）。 |
 
+- lib を作るのは 依存先に固有の取り決め（出力や答えの形・終了コードの意味・protocol・認証・状態）を読み書きする時だけ。コマンドを起こして終了コードを見るだけなら `outside` の子 process の口（Go = `Proc`）を直に使い lib を作らない（test は Proc の mock を渡す）。同じ取り決めを 2 か所以上が読み解いていたら 1 つの lib にまとめる。
 - 1 lib = 1 依存先（機械で判定できない = lib を足す変更の 設計の review で見る）。機能に `common`・`util`・`shared`・`helper` 等の 中身を表さない語を使わない（検査が拒む）。
 - 依存先の実物を起こす test の部品（例: 決めた版の DB を起こす部品）は その依存先の lib の 結合テストの中に置き、独立の lib にしない。
 - lib は `lint-platform` の `scaffold` で作る。検査 = 同じ道具の `check`（enforcement §4.1）。

@@ -49,17 +49,14 @@ outside は 全 project が module として取り込む共通部品である。
 
 ## 版が上がった時の伝え方
 
-版の tag を切った者が 切ったその場で 次の 3 つを行う。3 つ済んで 版を切った と言う。
+版の運用の正本 = `docs/deterministic-testing/reference.deterministic-testing.operations.md` (§2 版・§3 版の発行)。要点:
 
-1. `CHANGELOG.md` に 1 項を足す: 版・日付・足した / 変えた 口と method・足した project・
-   利用する project がやる事 (MINOR = 何もしなくてよい・次に触る時に上げる / MAJOR = 何を いつまでに直すか)。
-2. 利用する全 project (ccark・amatelas・kifune・daikokuten・demaetei) の 窓口 (UHS) と project-manager へ
-   同じ中身を 1 通ずつ送り 届いた事を確かめる (`ccark send`)。
-3. 全 seat が起動時に受け取る指示 (ccark memory の `owner-outside-only`) の 現行の版の記述を 新しい版へ直す。
+1. `CHANGELOG.md` に 部品・版・変えた口や規則・利用する側がやる事 を書く。
+2. `./scripts/release.sh <部品> <段>` で tag を打つ (手で `git tag` を打たない。部品の形でない tag が在れば止まる)。
+3. 依頼元と 全 project (ccark・amatelas・kifune・daikokuten・demaetei) の 窓口 (UHS) と project-manager へ 同じ中身を 1 通ずつ送り 届いた事を確かめる (`ccark send`)。
 
-- MAJOR は 全 project が同時に上げる。切る前に 全 project の project-manager と 上げる時期を合わせる。
-- MINOR は 前の版のままでも動く。ただし 版がずれた project は 定時の報告で名指され 次に触る時に揃える。
-- project が 今どの版を使っているかは Go = go.mod・Dart = pubspec.lock の 版で読む。TypeScript は 版の記録の形が未決。
+- 版を memory・CLAUDE.md・issue・agent の定義に書き写さない。版の正本 = tag (出ている版)・CHANGELOG.md (中身)・各 project の `.outside-version` (使っている版)。
+- MAJOR は 各 project が 直す準備ができた時に その部品だけ上げる。
 
 ## 外への access と test の置き場
 
@@ -69,7 +66,7 @@ outside は 全 project が module として取り込む共通部品である。
   機体に元から在る物 (機体の環境変数・/tmp に在る file・手元の repo) を読まない。
 - 利用する project の test は 実物を触らない。この部品の mock を渡す。
 - この部品自身の test は この repo の中で回す。利用する project の中では回さない
-  (Go と Dart の依存の test は project の検査に入らない。TypeScript で 共有 library の中の test を検査から外す仕組みは 未決)。
+  (置き場 `libs/outside/<部品>/` は 各 project の test・lint の対象から外す = enforcement.md §2〜§4)。
 
 ## mock の決め
 

@@ -80,3 +80,10 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 - `docs` (`docs/deterministic-testing/`) = `docs/v0.1.0`。各 project の lint の除外を `libs/outside/` の全部品へ広げた (enforcement §3・§4)。
 - `ts/`・`dart/` を `next/`・`angular/`・`flutter/` に分けるのは まだ (分けた時に 各部品の最初の版を出す)。`go/` は `go/v0.6.0` のまま。
 
+## docs/v0.2.0・lint-platform/v0.1.0 のまま (2026-11-24)
+
+- docs: 運用 (`reference.deterministic-testing.operations.md`) を 部品ごとの版の形へ書き直した (版の正本の表・版の発行・取り込み・依頼の流れ)。門番規約・製造規約 §4・目次の木を同じ形へ。adapters 層の lib を作る基準 (依存先に固有の取り決めを読み書きする時だけ。起こして終了コードを見るだけなら Proc) を adapters.md §0 に足した。
+- 版を memory・CLAUDE.md・issue・agent の定義に書き写さない (版の正本 = tag・CHANGELOG.md・各 project の .outside-version)。
+- scripts/release.sh: 打つ前に origin の tag を取り直す。部品の形でない tag が在れば止まる。部品の形でない古い tag (v0.1.0〜v0.6.0・lint/go/*・lint/naming/v0.6.0) は消した (参照している project が無い事を確かめた上で)。
+- 利用する側がやる事: docs/v0.2.0 を取り込む。他の部品は変わらない。
+

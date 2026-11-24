@@ -56,4 +56,8 @@ rel() { (cd "$src" && "$here/release.sh" "$1" "$2" --print); }
 g -C "$src" tag lint-platform/v0.10.0
 [ "$(rel lint-platform patch)" = lint-platform/v0.10.1 ] && ok "版は数で比べる (0.10 > 0.2)" || ng "版の比べ方 = $(rel lint-platform patch)"
 
+g -C "$src" tag v9.9.9
+if rel lint-platform patch >/dev/null 2>&1; then ng "部品の形でない tag が在るのに 版を出した"; else ok "部品の形でない tag が在れば止まる"; fi
+g -C "$src" tag -d v9.9.9 >/dev/null
+
 exit $fail

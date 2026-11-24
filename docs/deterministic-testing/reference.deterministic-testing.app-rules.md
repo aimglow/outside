@@ -68,8 +68,8 @@
 
 ## 4. `outside` 基盤改修プロトコル（専用セッションへの Relay 必須）
 
-`libs/outside/{go,angular,next,flutter}` は別リポジトリから `git archive`（タグ固定）で展開された共有基盤である。
-**本ワークスペースのセッションから `libs/outside/` 配下のファイルを直接編集することを固く禁ずる。**
+`libs/outside/<部品>/`（go・next・angular・flutter・lint-go・lint-ts・lint-dart・lint-platform）は `outside` repo の部品の tag から `git archive` で置いた写しである（`docs/deterministic-testing/` も同じ）。
+**本ワークスペースのセッションから `libs/outside/` 配下と `docs/deterministic-testing/` のファイルを直接編集することを固く禁ずる。**
 
 ### 機能が不足している場合の必須フロー
 1. **責務の切り分け:**
@@ -79,14 +79,14 @@
    - 不足機能が OS プリミティブである場合、業務背景やアプリ名を一切含めず、以下の形式で `outside` 専用セッションへ `relay` を依頼せよ。
    ```text
    【outside 機能追加依頼】
-   - 対象ディレクトリ: libs/outside/(go | next | angular | flutter)
+   - 対象の部品: go | next | angular | flutter | lint-go | lint-ts | lint-dart | lint-platform | docs
    - 追加したいOSプリミティブ概要:
    - 求めるシグネチャ案:
    - Mock実装に求める振る舞い:
-   - 完了条件: Real/Mock両方のテストをPASSさせ、./scripts/release.sh で発行された新タグ名を返却すること。
+   - 完了条件: Real/Mock両方のテストをPASSさせ、./scripts/release.sh <部品> <段> で発行された tag（例: go/v0.7.0）を返却すること。
    ```
 3. **同期と再開:**
-   - 返却された新タグ名（例: `v0.2.0`）を受け取ったら、`./scripts/sync-outside.sh <対象言語> <タグ>` を実行して展開ディレクトリをクリーン置換し、作業を再開せよ。
+   - 返却された tag（例: `go/v0.7.0`）を受け取ったら、`./scripts/sync-outside.sh <部品> <tag>` を repo の根で実行して置き場をクリーン置換し、作業を再開せよ（運用の正本 = `reference.deterministic-testing.operations.md`）。
 
 ---
 

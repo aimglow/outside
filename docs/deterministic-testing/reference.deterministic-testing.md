@@ -30,20 +30,23 @@ workspace/
 │   ├── web-portal/                        # [Next.js] 管理画面・SSRアプリ
 │   ├── admin-console/                     # [Angular] 業務SPAアプリ
 │   └── mobile-client/                     # [Flutter] モバイルアプリ
+├── outside-platform.toml                  # project 固有の機能の語（adapters.md §0）
 ├── libs/
-│   ├── outside/                           # 【第1層】OS・言語ランタイム境界（共有・不変・タグ同期）
-│   │   ├── go/                            # afero.Fs, Clock(Advance付), CmdRunner, IdGen, SysInfo
-│   │   ├── next/                          # node:fs + memfs, exec, env, now, idGen
-│   │   ├── angular/                       # Browser Storage(Mock), now, idGen, location/navigator
-│   │   └── flutter/                       # package:file, package:clock, ProcessRunner, Env, IdGen
+│   ├── outside/                           # 【第1層】outside の部品の写し（部品ごとの tag から sync-outside.sh で置く・編集しない）
+│   │   ├── go/                            # 口: FS, Clock(Advance付), Proc, IdGen, SysInfo
+│   │   ├── next/                          # 口: node:fs + memfs, exec, env, now, idGen
+│   │   ├── angular/                       # 口: Browser Storage(Mock), now, idGen, location/navigator
+│   │   ├── flutter/                       # 口: package:file, package:clock, ProcessRunner, Env, IdGen
+│   │   ├── lint-go/ lint-ts/ lint-dart/   # 外を直に呼ぶ code を落とす lint の設定
+│   │   └── lint-platform/                 # adapters 層の検査と雛形の作成
 │   └── platform/                          # 【第2層】adapters 層 = 外部の依存先ごとに 1 lib（interface / real / mock）
-│       ├── pg-postgres-go/                # 例: PostgreSQL への接続境界
+│       ├── db-postgres-go/                # 例: PostgreSQL への接続境界
 │       ├── authn-google-iap-go/           # 例: Google IAP の認証境界
-│       ├── git-cli-go/                    # 例: git CLI の境界
-│       └── auth-cookie-next/              # 例: Next.js の Cookie 境界
+│       ├── vcs-git-go/                    # 例: git CLI の境界
+│       └── authn-cookie-next/             # 例: Next.js の Cookie 境界
+├── docs/deterministic-testing/            # この文書群の写し（docs の部品）
 └── scripts/
-    ├── sync-outside.sh                    # outside 別リポジトリから git archive でタグ同期
-    └── check-forbidden.sh                 # 禁止構文・実機絶対パス検出スクリプト
+    └── sync-outside.sh                    # outside の部品を tag から git archive で取り込む（outside の scripts/ の写し）
 ```
 
 ---

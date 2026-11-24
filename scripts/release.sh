@@ -12,6 +12,12 @@ case $comp in go|next|angular|flutter|lint-go|lint-ts|lint-dart|lint-platform) d
 case $level in major|minor|patch) ;; *) die "段は major|minor|patch" ;; esac
 cd "$(git rev-parse --show-toplevel)"
 
+# 出ている版の正本は origin の tag。打つ前に取り直し origin に無い tag を手元から消す。
+if git remote get-url origin >/dev/null 2>&1; then git fetch -q --tags --prune-tags origin; fi
+# 部品の形でない tag は作らない決まり。1 つでも在れば 何もせず止まる (紛れた tag の上に版を積まない)。
+bad=$(git tag -l | grep -vE '^(go|next|angular|flutter|lint-go|lint-ts|lint-dart|lint-platform|docs)/v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+[ -z "$bad" ] || die "部品の形 (<部品>/vX.Y.Z) でない tag が在る: $(echo $bad)。消してから やり直す"
+
 last=$(git tag -l "$comp/v*" | sed "s#^$comp/v##" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 || true)
 if [ -z "$last" ]; then next=0.1.0; else
   IFS=. read -r ma mi pa <<<"$last"

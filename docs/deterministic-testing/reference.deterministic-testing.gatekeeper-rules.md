@@ -50,7 +50,7 @@
 
 機能追加とテストの実装が完了したら、手動で `git tag` や `git push` を行わず、必ず以下の手順でリリースすること。
 
-1. 変更内容をすべてステージングし、意図が明確なメッセージで `git commit` する。
-2. `./scripts/release.sh <major|minor|patch>` を実行する（足す = minor / 意味を変える・消す = major / 振る舞いを変えない直し = patch）。
-3. スクリプトが全 4 区分（`go`, `next`, `angular`, `flutter`）のテストを実行し、新規タグ（例: `v0.2.0`）を自動採番して Push する。
-4. 出力された `RELEASE_SUCCESS: <新タグ名>` を `relay` 元の本体セッションへ返却すること。
+1. 変更内容をすべてステージングし、意図が明確なメッセージで `git commit` する。`CHANGELOG.md` に 部品・版・利用する側がやる事を書く。
+2. `./scripts/release.sh <部品> <major|minor|patch>` を実行する（部品の表 = `design.outside.yaml` の `components`。足す = minor / 意味を変える・消す = major / 振る舞いを変えない直し = patch）。
+3. スクリプトがその部品のテストを実行し、新規タグ（例: `lint-platform/v0.2.0`）を採番して Push する。手で `git tag` を打たない。部品の形でない tag が在れば スクリプトは止まる。
+4. 出力された `RELEASE_SUCCESS: <tag>` を 依頼元の seat へ `ccark send` で返し 届いた事を確かめる。版を memory・CLAUDE.md 等へ書き写さない（版の正本 = operations.md §2）。
