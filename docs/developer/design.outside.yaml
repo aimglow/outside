@@ -122,11 +122,15 @@ ports:
       mock: 渡した表だけを返す。表に無い名前は 無い と返す。
     - name: FS
       does: 宣言した根の下の file を読む・書く・一覧する。
-      methods: [ReadFile, WriteFile, ReadDir, Stat, Remove, Open, AppendFile, MkdirAll, Lstat, Rename, RemoveAll]
+      methods: [ReadFile, WriteFile, ReadDir, Stat, Remove, Open, AppendFile, MkdirAll, Lstat, Rename, RemoveAll, Symlink, Readlink]
       rule: >
         根の外の path は 誤り (Rename は 両方の path)。IOFS(FS) は io/fs.FS として読ませる (io/fs を受ける値の関数へ渡す)。
         Open は 読むだけの io.ReadCloser (stream で読む)。AppendFile は 無ければ作り 末尾に足す。Lstat は symlink を辿らず FileInfo.IsSymlink で名乗る。
         RemoveAll は 根そのものを消さない (誤り)。無い path の RemoveAll は 誤りでない。
+        Symlink(target, link) は 根の中の link に target (文字列のまま) を指す symlink を作る。link に symlink が在れば 貼り替える (一時の名前で作ってから付け替える = 途中で link が無い時を作らない)。
+        link が file か dir なら 誤り。link の親の dir が無ければ 誤り。根の外を指す target も 作るだけなら誤りにしない (辿る時に 根の外は誤り)。
+        Readlink(link) は 記録した target を返す。symlink でなければ 誤り。
+        symlink を辿る操作 (ReadFile・Stat・Open 等) は 根の中に解ける target だけを辿る (real は os.Root、mock は 同じ規則で memory の木を辿る)。
       mock: memory の上の木。
     - name: Proc
       does: 宣言した名前の program を起こし 結果を返す。

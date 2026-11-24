@@ -30,6 +30,16 @@ cases:
     input: 書いた file を Open で読む / AppendFile 2 回 / MkdirAll の入れ子 / Rename (根の中・根の外) / RemoveAll (dir・無い path・根) / Lstat (real は symlink を自分で作る)
     expect: Open で書いた中身が読める・無い path は fs.ErrNotExist。AppendFile は 足した順に並ぶ。Rename の根の外は 誤り。RemoveAll は 中身ごと消え 無い path は 誤りでなく 根は 誤り。Lstat は symlink を IsSymlink で名乗る (mock の FS に symlink は無い)。
 
+  - id: TC-OUT-FS-SYMLINK
+    requirement: REQ-OUT-CONTRACT
+    behavior: Symlink・Readlink が real と mock で同じ振る舞いをする。
+    input: >
+      根の中の file を指す link を作る / 同じ link を別の target へ貼り替える / link が file・dir / 親の dir が無い /
+      根の外を指す target (../x と 絶対 path) / symlink でない path の Readlink / link 越しの ReadFile・Stat
+    expect: >
+      Lstat は IsSymlink。Readlink は 最後に貼った target。貼り替えの後 link 越しに 新しい中身が読める。link が file・dir と 親が無い は 誤り。
+      根の外を指す link は 作れ Readlink は target を返すが 辿る ReadFile は 誤り。symlink でない path の Readlink は 誤り。
+
   - id: TC-OUT-PROC-LOOKPATH
     requirement: REQ-OUT-TOOL-ENV
     behavior: LookPath は 宣言した program の path を返し 宣言に無い名前は ErrUndeclaredProgram。
