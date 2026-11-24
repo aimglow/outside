@@ -117,3 +117,15 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
   理由: 写しを編集しない決まりを 合流後の木で 機械で確かめ 古い branch の merge で写しが書き換わるのを land の段で止める (kifune #244 の頼み)。
 - docs: 運用 (operations.md §2・§4) に 指紋と `--check` を足した。版は `.outside-version` の 1 行目 (`head -1`)。
 - 利用する側がやる事: outside の main の `scripts/sync-outside.sh` を写し直し、置いた部品を 同じ tag で取り込み直す (指紋が書かれる。指紋の無い写しは `--check` が判定不能 = exit 3)。land の前の段に 部品ごとに `./scripts/sync-outside.sh --check <部品>` を置く。docs は docs/v0.6.0。
+
+## next/v0.1.0・angular/v0.1.0・flutter/v0.1.0 (2026-11-24)
+
+`ts/` を `next/` と `angular/` に、`dart/` を `flutter/` に分けた (部品 = runtime ごと、design.outside.yaml の components)。各部品の最初の版。
+
+- 口の組 (3 部品とも同じ、design.outside.yaml の ports.frontend_and_mobile): Clock (now・setTimeout・clearTimeout)・Http (request)・Storage (get・set・remove)・Config (get)・IdGen (newId)。
+  - 足した: IdGen。real = UUID v4 (TS は crypto.randomUUID、Dart は Random.secure)。mock = id-0001・id-0002 … (mock ごとに 1 から)。set (createRealSet・createMockSet / OutsideSet) に idGen を足した。
+- next (`@aimglow/outside-next`、mock = `@aimglow/outside-next/mock`): Node と Next.js。Config の real は 渡した値 → process.env の順。dependencies は空。
+- angular (`@aimglow/outside-angular`、mock = `@aimglow/outside-angular/mock`): browser。Config の real は 渡した値だけ (process を見ない)。`@angular/core` に依存しない = `ts/` に在った `provideOutside`・`OUTSIDE_*` の InjectionToken は持たない (DI の token は 各 project の adapters 層が持つ)。
+- flutter (Dart の package 名は `outside` のまま、mock = `package:outside/mock.dart`): iOS と Android。dependencies は空 (`package:http` を外し Http の real は `dart:io` の HttpClient。口の形 HttpRequest・HttpResponse は同じ)。Config の real は 渡した値 (build 時) → 環境変数の順。
+- 確かめ (TC-OUT-RUNTIME-DEPS): 各部品の依存の宣言と import が runtime の標準の外を持たない事を test が source から読んで確かめる。
+- 利用する側がやる事: `./scripts/sync-outside.sh next next/v0.1.0` (Next.js)・`angular angular/v0.1.0` (Angular)・`flutter flutter/v0.1.0` (Flutter) で取り込む。`ts/` の `@aimglow/outside` を参照していた所は `@aimglow/outside-next` か `@aimglow/outside-angular` へ。Angular の DI の token は adapters 層に置く。Dart の `package:http` を前提にした所は無い (口の形は同じ)。
