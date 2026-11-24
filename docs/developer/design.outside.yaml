@@ -99,6 +99,10 @@ requirements:
       adapters 層 (各 project の libs/platform) が 外の依存先ごとの lib の並びのまま保たれる事を 検査で強制する。
       検査が決めるのは lint.platform の rules の 3 つだけ。lib の中の形 (sub dir・3 file 以外の file・設定の file) は
       言語とツールの慣習に任せ 設計の review で見る。
+  - id: REQ-OUT-INTEGRATION-PLACE
+    text: >
+      本物の外部に触れる test (integration の印を持つ test) は adapters 層 (libs/platform/**) と project が adapter と宣言した dir の中だけに置く
+      (test-classification.md §4)。その外に在れば 検査が file を名指して落とす。宣言は outside-platform.toml の adapter_dirs。
   - id: REQ-OUT-LINT
     text: >
       各 stack の lint の設定を この repo が持ち、project は それを取り込む。
@@ -241,6 +245,18 @@ lint:
       機能の語が無い: project の宣言の file に足す (project の review)。
       runtime が無い: outside の部品を足すのと同じ扱い (門番へ依頼)。
       3 file に分けられない依存先: project の中で例外を作らない。門番へ「何を表したいか」を送り 門番が 規則を足して版を出すか 今の形で表す方法を返す。
+    tests:
+      purpose: integration の印を持つ test が 置いてよい場所の外に在れば落とす (REQ-OUT-INTEGRATION-PLACE)。
+      how: 同じ道具の tests --repo <repo の根> [--vocab <宣言>]。repo の木を歩き 印を持つ test の file を集め 置いてよい場所と照らす。
+      marks:
+        go: 名前が *_test.go で //go:build の式が tag integration を持つ (go/build/constraint で読む)。
+        ts: 名前が *.integration.spec.* か *.integration.test.* (ts・tsx・js・mjs)。
+        dart: 名前が *_test.dart で 中に @Tags([... 'integration' ...]) か tags: に 'integration' を持つ。
+      allowed: libs/platform/** と 宣言 adapter_dirs (repo の根からの相対 path の一覧。. と 根の外は 宣言できない = 判定不能)。
+      skip: .git・node_modules・.dart_tool の dir と libs/outside/** (取り込んだ写し。部品の test は写さない)。
+      not_checked: 印を持たずに 本物の外部に触れる test (印の無い物は 書く時の審査と testguard-writing が持つ)。
+      exit: 0 = 置き場の外に無い / 1 = 在る (file と runtime を名指す) / 3 = 読めない (木か宣言が読めない)。
+      vocab: outside-platform.toml に書けるのは capabilities と adapter_dirs。
     cases:
       # 想定したケース。表に無いケースが出たら ここに足し 規則を直す。
       - 新しい外の依存先 (同じ機能・別の依存先、例 db-mysql-go) → 今の語で表せる

@@ -215,6 +215,18 @@ cases:
     mocks: test が作った 空の dir
     expect: 前者は 3 file が出来 検査が違反 0。後者は 何も作らず 誤り。
 
+  - id: TC-OUT-LINT-PLATFORM-TESTS
+    requirement: REQ-OUT-INTEGRATION-PLACE
+    behavior: tests は integration の印を持つ test が libs/platform/** と adapter_dirs の外に在れば 名指して落とす。印の無い test と 置き場の中の物は 通す。
+    input: >
+      test が作る repo の木 = libs/platform/db-postgres-go/x_test.go (//go:build integration) / tools/dbgate/db_test.go (//go:build integration) /
+      tools/dbgate/unit_test.go (印なし) / apps/web/a.integration.spec.ts / libs/platform/http-fetch-next/src/b.integration.spec.ts /
+      apps/mobile/test/c_test.dart (@Tags(['integration'])) / tools/legacy/d_test.go (//go:build integration && linux) と adapter_dirs = ["tools/legacy"] /
+      node_modules・libs/outside の下の 印つき file / adapter_dirs = ["."] か ["../x"] の宣言
+    expect: >
+      tools/dbgate/db_test.go・apps/web/a.integration.spec.ts・apps/mobile/test/c_test.dart の 3 件を runtime と共に名指し exit 1。
+      印なし・libs/platform の下・宣言の dir の下・node_modules と libs/outside の下は 名指さない。. と 根の外の宣言は exit 3。
+
   - id: TC-OUT-SYNC
     requirement: REQ-OUT-VENDOR
     behavior: >
