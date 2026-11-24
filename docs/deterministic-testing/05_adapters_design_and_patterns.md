@@ -4,6 +4,28 @@
 
 ---
 
+## 0. adapters 層 (`libs/platform/`) の命名規則（厳格・機械で落とす）
+
+`libs/platform/` の直下の dir は 次の形だけを許す。形に合わない名前は lint が赤にする。
+
+```text
+<機能>-<依存先>-<runtime>
+```
+
+| 部分 | 許す値 |
+| :--- | :--- |
+| `<機能>` | 次の表の語だけ: `authn`（認証）・`db`（DB）・`vcs`（版管理）・`container`（container）・`migrate`（migration）・`schema`（API の型定義）・`config`（設定）・`log`（log）・`http`（通信）・`kv`（保存）・`ipc`（process 間通信）・`remote`（遠隔の実行）。語を足すときは この表を先に直す。 |
+| `<依存先>` | 外部の製品・プロトコルの名前（小文字・`-` 区切り。例: `postgres`・`google-iap`・`cloudflare-access`・`git`・`podman`・`atlas`・`buf`・`ssh`）。 |
+| `<runtime>` | `go`・`next`・`angular`・`flutter` のどれか（`outside` と同じ 4 つ）。 |
+
+- 1 lib = 1 依存先。`common`・`util`・`shared`・`helper` 等の 依存先の分からない名前を作らない。
+- 依存先の実物を起こす test の部品（例: 決めた版の DB を起こす部品）は その依存先の lib の 結合テストの中に置き、独立の lib にしない。
+- 検査の正規表現（lint の段で `libs/platform/` の直下の dir 名に当てる）:
+
+```text
+^(authn|db|vcs|container|migrate|schema|config|log|http|kv|ipc|remote)-[a-z0-9]+(-[a-z0-9]+)*-(go|next|angular|flutter)$
+```
+
 ## 1. 最重要ルール：3 ファイル分離による権限隔離
 
 AI に `adapters/` の作成を許可すると、手抜きをして **`Mock` 実装の中に `Date.now()` や実機パス（`/Users/...`）をハードコードするリスク**が発生します。
