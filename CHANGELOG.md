@@ -169,3 +169,11 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 - docs: enforcement.md §3・app-rules.md・non-deterministic.md の 乱数の受け先を IdGen と Random に分けて書いた。
 - 注意 (Go 1.26): `crypto/ecdh` の `GenerateKey`・`crypto/rand.Prime` 等の鍵の生成は 渡した読み手を無視し 常に安全な乱数を使う (GODEBUG=cryptocustomrand=1 の時だけ使う)。mock の Random を渡しても 鍵は決まらない。鍵を test で決めたい処理は Random で読んだ byte から作る (例 `curve.NewPrivateKey(b)`、X25519 は 32 byte)。
 - 利用する側がやる事: go を v0.10.0・lint-go を v0.3.0 に上げ、crypto/rand.Read・Reader を Set.Random へ、rand.Int(crand.Reader, max) を rand.Int(set.Random, max) へ移す。`Set`・`Base` を自前で組む所は Random を足す。
+
+## next/v0.2.0・angular/v0.2.0・flutter/v0.2.0 (2026-11-25)
+
+- 足した: 口 Random (`read(buf)` = 渡した byte 列 (TS = Uint8Array、Dart = Uint8List) を全部埋める。長さは呼び手が決める = trace-id 16 byte・span-id 8 byte 等)。
+  - real: TS = `createRealRandom()` (crypto.getRandomValues。65536 byte を超える buf は分けて埋める。crypto が無ければ名乗って throw)、Dart = `RealRandom()` (Random.secure)。
+  - mock: TS = `createMockRandom(seed)`、Dart = `MockRandom(seed)`・`MockRandom.text(seed)`。種と呼び順で決まる列 (分けて読んでも続けて読んでも同じ。3 部品で同じ種から同じ列)。`calls` = 読んだ長さの順。`withErr(err)` で以後の read が投げる (undefined・null で戻る)。
+  - set: `OutsideSet` に `random`。TS の `createMockSet` の options に `seed` (既定 `DEFAULT_MOCK_RANDOM_SEED`)。
+- 利用する側がやる事: `createRealSet`・`createMockSet`・`OutsideSet.real` を使う所は 何もしなくてよい。set を自分で組む所は `random` を足す (Dart の `OutsideSet(...)` は `random:` が必須)。乱数の byte を作る code は crypto を直に呼ばず `set.random.read(buf)`。Dart で `dart:math` と `package:outside/outside.dart` を両方 取り込む file は `Random` の名が衝突する = `import 'dart:math' as math;` か `hide Random`。
