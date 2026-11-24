@@ -106,3 +106,50 @@ cases:
     behavior: Go・TypeScript・Dart の port と method の名前の組が 設計書の ports の節と一致する。
     input: 設計書の ports の節・各言語の公開の名前の一覧
     expect: 3 つの言語とも 設計書と同じ組。食い違いは 名前を出して 誤り。
+
+  - id: TC-OUT-LINT-PLATFORM
+    requirement: REQ-OUT-PLATFORM-LAYOUT
+    behavior: >
+      直下の項目の表 (名前・dir か・lib の中の file の相対 path) を値で渡し 規則の 3 つの違反を名指す。
+      lib の中の sub dir と 3 file 以外の file は 名指さない。同じ runtime で同じ依存先が 2 つの機能に在れば 警告に出す。
+    input: >
+      規則どおりの Go (直下)・TS (src/ の下)・Dart (lib/ の下) の lib / 表に無い機能の語 / runtime の無い名前 /
+      何の依存先か分からない名前 / mock の無い lib / 直下の file / 3 file と別の sub dir と設定の file を持つ lib /
+      db-postgres-go と kv-postgres-go の並び
+    mocks: なし (disk を読まない純粋関数)
+    expect: 規則どおりと sub dir・設定の file を持つ lib は 違反 0。他は 名前と理由で名指す。並びは 警告 1 件で 違反 0。
+
+  - id: TC-OUT-LINT-PLATFORM-TABLE
+    requirement: REQ-OUT-PLATFORM-LAYOUT
+    behavior: 規則の表 (機能の語 × runtime) の全ての組が 名前の形として通る (表と形の食い違いを捕る陽性対照)。
+    input: rules.go の表
+    expect: 全ての組が通る。runtime ごとの必須の file は 3 個。中身を表さない語は 共通の表に無い。
+
+  - id: TC-OUT-LINT-PLATFORM-VOCAB
+    requirement: REQ-OUT-PLATFORM-LAYOUT
+    behavior: project の宣言の語は 共通の語と同じく通る。宣言に無い語は 違反。中身を表さない語の宣言は 判定不能 (exit 3)。
+    input: 宣言 [platform] capabilities = ["pay"] と pay-stripe-go / mail-ses-go の lib。宣言 ["util"]。
+    expect: pay-stripe-go は通る。mail-ses-go は 違反。util の宣言は 語を名指して exit 3。
+
+  - id: TC-OUT-LINT-PLATFORM-SCAFFOLD
+    requirement: REQ-OUT-PLATFORM-LAYOUT
+    behavior: scaffold は 規則どおりの名前なら dir と 3 file を作り 作った物は 検査に通る。規則に合わない名前なら 何も作らない。
+    input: 空の根に scaffold db postgres go と scaffold misc x go
+    mocks: test が作った 空の dir
+    expect: 前者は 3 file が出来 検査が違反 0。後者は 何も作らず 誤り。
+
+  - id: TC-OUT-SYNC
+    requirement: REQ-OUT-VENDOR
+    behavior: >
+      sync-outside.sh は 渡した部品の tag から その部品の path だけを取り出し place を丸ごと置き換え .outside-version に tag を書く。
+      他の部品の tag・形の違う tag・在らない tag は 何も書かずに誤りで終わる。
+    input: test が作った bare repo (2 つの部品と それぞれの tag) と 取り込み先の作業木 (place に古い写しと余分な file)
+    mocks: 取得元は test が作った bare repo (網を使わない)
+    expect: place の中身が tag の中身と一致し 余分な file が消え .outside-version が tag。誤りの時は 取り込み先が 1 byte も変わらない。
+
+  - id: TC-OUT-RELEASE
+    requirement: REQ-OUT-COMPONENT
+    behavior: release.sh <部品> <段> は その部品の最新の tag から次の版を決め 他の部品の tag に影響されない。
+    input: test が作った repo (go/v0.6.0・lint-platform/v0.1.0 の tag)
+    expect: lint-platform minor → lint-platform/v0.2.0。go patch → go/v0.6.1。tag の無い部品 → <部品>/v0.1.0。
+

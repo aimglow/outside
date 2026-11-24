@@ -68,8 +68,22 @@ requirements:
     text: secret の値を 作業場へ複製しない。secret を読む口は 値を返すだけで 置き場を作らない。
   - id: REQ-OUT-PARITY
     text: port の名前と意味は Go・TypeScript・Dart で同じ。この設計書の ports の節が唯一の定義。
-  - id: REQ-OUT-SAME-VERSION
-    text: 全 project は 同じ版を使う。版の食い違いは 名指す。
+  - id: REQ-OUT-COMPONENT
+    text: >
+      版は 部品 (components の表の 1 行) ごとに独立に出す。project は 部品ごとに 版を選んで取り込む
+      (lint だけ上げて 口は据え置く・go だけ上げて flutter は据え置く が できる)。
+  - id: REQ-OUT-VENDOR
+    text: >
+      project は 部品を 版の tag から git archive で取り出し 自分の repo の中の 決まった置き場へ置く
+      (components の表の place)。検査や build のたびに 網から取らない。置いた写しは project の中で編集しない。
+      どの部品の どの版を置いたかは 置き場の .outside-version に書く。
+  - id: REQ-OUT-VERSION-VISIBLE
+    text: 各 project が どの部品の どの版を置いているかを .outside-version から名指せる。project の間の版の違いは 名指すが 止めない。
+  - id: REQ-OUT-PLATFORM-LAYOUT
+    text: >
+      adapters 層 (各 project の libs/platform) が 外の依存先ごとの lib の並びのまま保たれる事を 検査で強制する。
+      検査が決めるのは lint.platform の rules の 3 つだけ。lib の中の形 (sub dir・3 file 以外の file・設定の file) は
+      言語とツールの慣習に任せ 設計の review で見る。
   - id: REQ-OUT-LINT
     text: >
       各 stack の lint の設定を この repo が持ち、project は それを取り込む。
@@ -142,6 +156,41 @@ tool_entry:
       fs_roots: 読み書きしてよい根の一覧 (repo の中の相対 path)
 
 lint:
+  platform:
+    purpose: adapters 層 (libs/platform) の直下を 外の依存先ごとの lib の並びに保ち ごみ置き場にしない。
+    rules:
+      - 直下の dir 名は <機能>-<依存先>-<runtime>。runtime の語と 全 project 共通の機能の語は lint-platform/naming/rules.go の表 (規則の正本)。
+        project 固有の機能の語は その project が 宣言の file (--vocab に渡す TOML、[platform] capabilities = [...]) に書く。
+        中身を表さない語 (common・util・shared・helper・misc・lib・core・base・other) は 共通の表にも 宣言にも 置けない (道具が拒む)。
+      - 直下に dir 以外の物を置かない。
+      - 各 lib は runtime ごとの 3 file (interface / real / mock) を 直下か src/ か lib/ に持つ。
+    not_checked:
+      - lib の中の sub dir・3 file 以外の file・設定の file (言語とツールの慣習に任せる)
+      - 1 lib が 1 つの依存先だけを扱っているか (機械で判定できない。lib を足す変更の 設計の review で見る)
+      - mock・interface が 外を直に呼ばないか (lint-go・lint-ts・lint-dart の禁止の一覧が持つ)
+    warn: 同じ runtime で 同じ依存先が 2 つの機能に現れたら 名指す (止めない。正当かは 設計の review で決める)。
+    exit: 0 = 違反なし / 1 = 違反あり / 3 = 読めない (判定不能。宣言の file が読めない・中身を表さない語を宣言した も ここ)
+    scaffold: >
+      同じ道具の scaffold <機能> <依存先> <runtime> が 規則どおりの名前の dir と runtime の 3 file の雛形を作る
+      (作る前に 名前を同じ規則で確かめ 通らなければ何も作らない)。lib は scaffold で作る事を既定とし 検査は 後から崩れた物を捕る。
+    who_decides:
+      runtime の語: outside 門番 (outside の部品と 1 対 1)
+      共通の機能の語: outside 門番 (2 つ以上の project が使う語を 共通へ上げる)
+      project 固有の機能の語: その project (宣言の file の変更を その project の review で見る)
+      1 lib が 1 依存先か: その project の 設計の review
+    not_expressible:
+      機能の語が無い: project の宣言の file に足す (project の review)。
+      runtime が無い: outside の部品を足すのと同じ扱い (門番へ依頼)。
+      3 file に分けられない依存先: project の中で例外を作らない。門番へ「何を表したいか」を送り 門番が 規則を足して版を出すか 今の形で表す方法を返す。
+    cases:
+      # 想定したケース。表に無いケースが出たら ここに足し 規則を直す。
+      - 新しい外の依存先 (同じ機能・別の依存先、例 db-mysql-go) → 今の語で表せる
+      - 新しい種類の依存先 (決済・メール・object storage・LLM) → project が機能の語を宣言して表す
+      - 同じ依存先を 2 つの runtime から使う (authn-cookie-next と authn-cookie-angular) → runtime 違いの 2 lib
+      - 同じ依存先を 2 つの機能で使う (db-postgres-go と kv-postgres-go) → 通すが 警告で名指す
+      - lib の中に 設定の file・生成された code・sub package が要る → 規則は見ない (言語とツールの慣習)
+      - 生成された client で 3 file に分けられない → 門番へ依頼
+      - 規則を厳しくした版 → MAJOR で出す。project は 直す準備ができてから lint-platform の版だけを上げる
   go:
     tool: golangci-lint 2.x (forbidigo)
     config: lint/go/golangci.yml (利用する project が取り込む)
@@ -164,29 +213,41 @@ lint:
     except: この部品の real の library と lint 自身 (対象の dir に渡さない)
     limit: 型を解決しない構文木で読む = 別名の import (import 'dart:io' as io の io.File 等) は名指せない。見つけたら この一覧に足す。
 
-layout:
-  go: go/            # module = github.com/aimglow/outside/go、 mock = go/outsidemock
-  typescript: ts/    # package = @aimglow/outside、 mock = @aimglow/outside/mock
-  dart: dart/        # package = outside
-  lint: lint/        # stack ごとの設定
-  docs: docs/developer/
+components:
+  # name = 版の tag の頭 (<name>/vX.Y.Z) / path = この repo の中の dir / place = 取り込む project の中の置き場
+  - {name: go,            path: go/,                         place: libs/outside/go/}
+  - {name: next,          path: next/,                       place: libs/outside/next/}
+  - {name: angular,       path: angular/,                    place: libs/outside/angular/}
+  - {name: flutter,       path: flutter/,                    place: libs/outside/flutter/}
+  - {name: lint-go,       path: lint-go/,                    place: libs/outside/lint-go/}
+  - {name: lint-ts,       path: lint-ts/,                    place: libs/outside/lint-ts/}
+  - {name: lint-dart,     path: lint-dart/,                  place: libs/outside/lint-dart/}
+  - {name: lint-platform, path: lint-platform/,              place: libs/outside/lint-platform/}
+  - {name: docs,          path: docs/deterministic-testing/, place: docs/deterministic-testing/}
+  rule:
+    - path と place は 部品の名前から決まる (docs だけ 各 project の docs の中に置く。持ち主の決め = 各 project の docs に入れ CLAUDE.md から必読にする)。
+      取り込みの script は この対応を 名前から引き 設定の file を読まない。
+    - 部品を足す・名前を変える時は この表と sync-outside.sh の対応を 同じ commit で直す。
 
 versioning:
-  scheme: 版は git の tag (vMAJOR.MINOR.PATCH)。Go の module は go/vMAJOR.MINOR.PATCH。
+  scheme: 版は 部品ごとの git の tag <部品>/vMAJOR.MINOR.PATCH。release.sh <部品> <major|minor|patch> が その部品の最新の tag から次を打つ。
   meaning:
-    0.x: どの project の main にも まだ入っていない間。口の形を 実物の付け替えで確かめている段。
-         この間は 意味を変える・消す変更も MINOR で出す (使う main が無いので 壊す相手が居ない)。
-    1.0.0: 最初の project の main に入る時に切る。
-           以後 全 project の main が この版の上に居る = 下の rule で 壊す変更を名指す。
+    0.x: その部品が どの project の main にも まだ入っていない間。意味を変える・消す変更も MINOR で出す。
+    1.0.0: その部品が 最初の project の main に入る時に切る。
   rule (1.0.0 から):
-    - port の method を消す・意味を変える = MAJOR
-    - port か method を足す = MINOR
+    - 口の method を消す・意味を変える / lint の規則を足して 今まで通っていた code を赤にしうる = MAJOR
+    - 口か method を足す / 今まで通っていた code を赤にしない lint の直し = MINOR
     - 振る舞いを変えない直し = PATCH
+  old_line: 古い版を使う project へ直しだけを届ける時は その版の tag から branch fix/<部品>-v<MAJOR>.<MINOR> を切り PATCH の tag を打つ。
   consume:
-    go: module として 版の git の tag を指す (go.mod の require)。project の中に file を複製しない。
-    dart: pubspec の git 依存で 版の tag を指す (ref)。
-    typescript: Nx の共有 library として 版の git の tag から取得して置く。取得の仕組み (clone の形) と 版の記録の形は 未決。
+    how: >
+      sync-outside.sh <部品> <tag> (project の中に置く script)。一時の bare repo に その tag だけを取り
+      (git fetch --depth 1)、git archive で 部品の path を取り出し place を丸ごと置き換え .outside-version を書く。
+      GitHub は git archive --remote に応じないので 一時の bare repo を経る (実測 2026-11-24)。
+    fetch_from: https://github.com/aimglow/outside.git
     fetch_identity: git から取得するのは ccark-gitops の名義 (seat の検査も image の build (gitops) も 同じ)。
+    go: project の go.mod は replace で libs/outside/go を指す (module path は github.com/aimglow/outside/go のまま)。
+    lint_platform: 各 project の push の前の検査の 1 段 = go -C libs/outside/lint-platform run . --root ../../platform。読む物 = libs/platform/** と libs/outside/lint-platform/**。
     registry: 有料の registry にも 公開の registry にも 登録しない。
 
 delivery:
@@ -194,6 +255,5 @@ delivery:
   consequence: 確かめは commit の前に 手元で回す。壊れた版を tag にしない。
 
 open:
+  - 部品の間に 版の前提 (例 lint-go が go の新しい口の名前を前提にする) が生じたら その時に 前提を宣言する形を決める
   - Go の FS の method の最小の組 (足りない物は MINOR で足す)
-  - 全 project の版の食い違いを名指す口を どこに置くか
-  - TypeScript の取得の仕組み (clone の形) と 版の記録の形
