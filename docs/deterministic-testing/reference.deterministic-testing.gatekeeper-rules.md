@@ -25,9 +25,10 @@
    - `User`, `Session`, `Order`, `Ledger`, `Cookie`, `Token` といった業務・プロトコル概念を含む型・メソッド・定数を書いてはならない。
 3. **対象ランタイム外のフレームワーク依存禁止:**
    - **`go/`:** 標準ライブラリおよび `github.com/BurntSushi/toml`（`outside.toml` の読み取り）以外の外部パッケージを追加してはならない。
-   - **`next/`:** `node:*` 標準モジュールおよび `memfs` 以外の依存（特に **`next`, `react`, `@angular/*`**）を持ち込んではならない。
+   - **`next/`:** `node:*` 標準モジュール以外の依存（特に **`next`, `react`, `@angular/*`**）を持ち込んではならない（`dependencies` は空。test だけが使う物は `devDependencies`）。
    - **`angular/`:** ブラウザ標準 Web API 型（`Storage`, `Location` 等）のみに依存し、**`@angular/core` や Node.js 固有モジュール（`node:fs` 等）** を持ち込んではならない。
-   - **`flutter/`:** `dart:*` および `package:file`, `package:clock` 以外の依存（特に **`package:flutter` やネイティブプラグイン類**）を絶対に `import` してはならない。Pure Dart を維持すること。
+   - **`flutter/`:** `dart:*` 以外の依存（特に **`package:flutter` やネイティブプラグイン類**）を絶対に `import` してはならない（`dependencies` は空）。Pure Dart を維持すること。
+   - 依存の範囲の正本 = `design.outside.yaml` の `REQ-OUT-RUNTIME-DEPS`（検査 = `TC-OUT-RUNTIME-DEPS`）。
 4. **本体プロジェクト固有設定のハードコード禁止:**
    - 特定のパス構造（`/app/config.json` 等）や特定の環境変数名（`NEXT_PUBLIC_*` 等）をデフォルト値として組み込んではならない。
 

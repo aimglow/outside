@@ -115,39 +115,34 @@ AI エージェントに規約を守らせる最大の鍵は、プロンプト�
 
 ---
 
-## 3. Go 禁止構文・実機パス禁止 `.golangci.yml`
+## 3. Go 禁止構文の検査（`outside` の `lint-go`）
+
+- 禁じる呼び出しの一覧の正本 = `outside` の部品 `lint-go` の `golangci.yml`（各 project では `libs/outside/lint-go/golangci.yml`）。この文書に一覧を写さない。
+  禁じる物 = 時計（`time.Now` 等 → `Clock`）・環境変数（→ `Env`）・機体と process の値（`os.Hostname`・`os.Getpid`・`os.UserHomeDir` 等 → `SysInfo`）・
+  乱数（`math/rand`・`math/rand/v2`・`crypto/rand` → `IdGen`）・子 process（→ `Proc`）・system の一時置き場（→ `Workdir`）・file（→ `FS`）。
+- 除外は 取り込む project の側の設定に置く（`lint-go` には入れない）。project の `.golangci.yml` は `lint-go` の `forbidigo` の設定を そのまま持ち（`lint-go` を取り込み直したら 合わせる）、除外だけを足す:
 
 ```yaml
-# .golangci.yml
+# .golangci.yml (project の根。forbidigo の設定は libs/outside/lint-go/golangci.yml と同じ)
+version: "2"
 linters:
+  default: none
   enable:
     - forbidigo
-
-linters-settings:
-  forbidigo:
-    forbid:
-      - p: '^time\.Now$'
-        msg: "直接 time.Now() を呼ばず、env.Clock.Now() を使用してください"
-      - p: '^time\.Sleep$'
-        msg: "直接 time.Sleep() を呼ばず、env.Clock.Sleep() を使用してください"
-      - p: '^os\.(Open|Create|ReadFile|WriteFile|MkdirAll|Remove|RemoveAll|Stat)$'
-        msg: "直接 os のファイル操作を行わず、env.Fs (afero.Fs) を使用してください"
-      - p: '^os\.(Getenv|LookupEnv|Setenv)$'
-        msg: "直接環境変数を参照せず、env.Getenv() を使用してください"
-      - p: '^os\.(Getwd|TempDir|UserHomeDir|UserConfigDir|UserCacheDir|Hostname|Getpid)$'
-        msg: "実行環境・機体依存になるため禁止です。env.Sys または仮想パスを使用してください"
-      - p: '^exec\.Command(Context)?$'
-        msg: "直接 exec.Command を呼ばず、env.Cmd を使用してください"
-      - p: '^(math/rand|crypto/rand)\.'
-        msg: "直接乱数を生成せず、env.Id.NewID() を使用してください"
-
-issues:
-  exclude-rules:
-    # outside から取り込んだ写し (libs/outside/ の全部品) と、adapters 層の本番実装 (libs/platform/*/adapter_real.go) と 入口の main.go (apps/*・tools/*) のみ許可
-    - path: ^(libs/outside/|libs/platform/[^/]+/adapter_real\.go$|apps/[^/]+/main\.go$|tools/[^/]+/main\.go$)
-      linters:
-        - forbidigo
+  settings:
+    forbidigo:
+      analyze-types: true
+      forbid:
+        # libs/outside/lint-go/golangci.yml の forbid を そのまま置く
+  exclusions:
+    rules:
+      # outside から取り込んだ写し (libs/outside/ の全部品) と、adapters 層の本番実装 (libs/platform/*/adapter_real.go) と 入口の main.go (apps/*・tools/*) のみ許可
+      - path: ^(libs/outside/|libs/platform/[^/]+/adapter_real\.go$|apps/[^/]+/main\.go$|tools/[^/]+/main\.go$)
+        linters:
+          - forbidigo
 ```
+
+- `analyze-types: true` の下では `pattern` は 型から引いた「package の名前.名前」に、`pkg` は import path に照らされる。`math/rand` と `crypto/rand` は 名前が同じ `rand` ゆえ `pkg` で区切る（`pattern` に import path を書いても当たらない）。
 
 ---
 

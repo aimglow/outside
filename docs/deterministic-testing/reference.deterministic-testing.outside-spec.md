@@ -216,6 +216,8 @@ func NewMock(fixedTime time.Time) *Env {
 
 ## 3. `libs/outside/next`（Next.js / Node.js ランタイム）
 
+> **実物の名前（正）:** 口の組は `clock`・`http`・`storage`・`config`・`idGen`（`createRealSet` / `createMockSet`、mock は `@aimglow/outside-next/mock`）。`dependencies` は空で `memfs` は使わない。下のコードは 考え方の参照で、名前と口の組は実物と `design.outside.yaml` の `ports` に従う。
+
 サーバーサイド（Route Handler / Server Action / UseCase）向けの OS 境界です。
 
 ```typescript
@@ -294,6 +296,8 @@ export function createMockOutside(fixedIso = '2026-01-01T00:00:00.000Z'): MockOu
 
 ## 4. `libs/outside/angular`（Angular / ブラウザ ランタイム）
 
+> **実物の名前（正）:** 口の組は `clock`・`http`・`storage`・`config`・`idGen`（`createRealSet` / `createMockSet`、mock は `@aimglow/outside-angular/mock`）。下のコードは 考え方の参照で、名前と口の組は実物と `design.outside.yaml` の `ports` に従う。
+
 ブラウザ環境には Node.js の `fs` や `process.env` が存在しないため、ブラウザ固有の非決定要素（時計・乱数・Web Storage・Location 情報）を隔離します。
 
 ```typescript
@@ -363,6 +367,8 @@ export function createMockBrowserOutside(
 ---
 
 ## 5. `libs/outside/flutter`（Dart / Flutter ランタイム）
+
+> **実物の名前（正）:** 口の組は `Clock`・`Http`・`Storage`・`Config`・`IdGen`（mock は `package:outside/mock.dart`）。`dependencies` は空（`package:file`・`package:clock`・`package:http` も使わない。Http の real は `dart:io` の `HttpClient`）。下のコードは 考え方の参照で、名前と口の組は実物と `design.outside.yaml` の `ports` に従う。
 
 `package:flutter` を一切 `import` しない Pure Dart 構成とすることで、UI なしの高速な `dart test` / `flutter test` キャッシュを保証します。
 

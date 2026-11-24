@@ -18,11 +18,11 @@
 単なる言語単位（`go`, `ts`, `dart`）ではなく、**実行ランタイム環境**を基準に 4 サブディレクトリへ分割することで、過不足のない抽象化を実現します。
 
 1. **`libs/outside/go`（システム・デーモン・CLI ランタイム）**
-   - OS ファイルシステム（`afero`）、仮想時計＋Ticker 制御（`Clock`）、外部プロセス実行（`CmdRunner`）、環境変数（`Env`）、決定論的 ID 生成（`IdGen`）、マシン識別子（`SysInfo`）を提供。
+   - 根を宣言したファイルシステム（`FS`）、仮想時計（`Clock`）、外部プロセス実行（`Proc`）、環境変数（`Env`）、作業場（`Workdir`）、決定論的 ID 生成（`IdGen`）、機体と process の値（`SysInfo`）を提供。
 2. **`libs/outside/next`（Node.js サーバー／SSR ランタイム）**
-   - `node:fs/promises`（`memfs` 連携）、`child_process`（`exec`）、`process.env`（仮想環境変数マップ）、サーバー時刻（`now`）、決定論的 ID（`idGen`）を提供。
+   - 時計（`clock`）、通信（`http`）、保存（`storage`）、設定（`config`、`process.env` を引く）、決定論的 ID（`idGen`）を提供。Node の `fs`・`child_process` の口は 要る project が出た時に足す（`design.outside.yaml` の `open`）。
 3. **`libs/outside/angular`（ブラウザ DOM／SPA ランタイム）**
-   - ブラウザには `node:fs` が存在しない代わりに、`localStorage` / `sessionStorage` のインメモリ Mock、ブラウザ時計（`now`）、決定論的 ID（`idGen`）、`location` / `navigator` 情報の抽象インターフェースを提供。
+   - ブラウザには `node:fs` が存在しない代わりに、保存（`storage`、`localStorage` / `sessionStorage`）、時計（`clock`）、通信（`http`）、設定（`config`、渡した値だけ）、決定論的 ID（`idGen`）を提供。`@angular/core` に依存しない（DI の token は adapters 層が持つ）。
 4. **`libs/outside/flutter`（Dart / モバイル・デスクトップ ランタイム）**
    - `package:flutter` への依存を排除した Pure Dart 構成で、`package:file`（`MemoryFileSystem`）、`package:clock`（`Clock.fixed`）、`ProcessRunner`、`Env`、`IdGen` を提供。Flutter 固有の `MethodChannel` や `SharedPreferences` は `adapters/` 側で隔離する。
 
