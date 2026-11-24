@@ -408,6 +408,13 @@ func RunTool(declPath string, fn func(Set) error) error {
 			}
 			return NewWorkdir(r)
 		},
+		EnsureWorkdir: func(r string) (Workdir, error) {
+			p := filepath.Join(root, r)
+			if err := os.MkdirAll(p, 0o755); err != nil {
+				return nil, fmt.Errorf("%w: %s を作れない: %v", ErrNoWorkdirRoot, p, err)
+			}
+			return NewWorkdir(p)
+		},
 	}
 	return RunToolWith(decl, base, fn)
 }

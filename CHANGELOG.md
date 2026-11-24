@@ -92,3 +92,11 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 - scripts/sync-outside.sh: 部品の test (Go の `*_test.go`・`testdata/`、TS の `*.test.*`・`*.spec.ts`、Dart の `*_test.dart`・`test/`) を写さない。写すと 取り込んだ project の test の検査 (ccark testguard 等) が 部品の test を その project の test として咎める (kifune #244 で実測)。
 - 利用する側がやる事: outside の main の `scripts/sync-outside.sh` を写し直し、置いた部品を 同じ tag で取り込み直す (部品の test が消える)。docs は docs/v0.3.0。
 
+## go/v0.7.0 (2026-11-24)
+
+- 作業場の置き場 (outside.toml の workdir_root) が repo の中の相対 path なら 無ければ作る。$NAME で指す置き場は 今までどおり 無ければ判定不能 (exit 3)。
+  理由: 隔離した環境 (ccark の land の段は CCARK_DATA を 空の使い捨ての dir にする) で $CCARK_DATA/<dir> を置き場にした tool が 置き場が無く止まった (kifune #244 で実測)。
+  repo の中なら 新しい clone でも 同じ形で回る。
+- Base に EnsureWorkdir を足した (nil なら Workdir と同じ)。RunToolWith に 自前の Base を渡す側は 足さなくても 今までどおり動く。
+- 利用する側がやる事: tool の workdir_root を repo の中の相対 path (例 ".work/<tool>"、.gitignore に入れる) にする。$CCARK_DATA の下を置き場にしない (ccark が約束した置き場ではない)。
+

@@ -48,6 +48,13 @@ cases:
     input: 置き場が在る宣言・置き場が無い宣言
     expect: 作られた path は 置き場の下。置き場が無い時は 誤りで system の一時置き場に作らない。
 
+  - id: TC-OUT-WORKDIR-REPO-ENSURE
+    requirement: REQ-OUT-WORKDIR
+    behavior: 置き場が repo の中の相対 path で 在らなければ 作って 処理を呼ぶ。$NAME が指す置き場が在らなければ 作らず 判定不能。
+    input: 宣言 workdir_root = ".work/tool" (在らない) / workdir_root = "$NAME" (指す先が在らない)
+    mocks: real は test が作った dir の下 / mock は outsidemock の Workdir
+    expect: 前者は 置き場が出来 作業場は その直下 処理は 1 回。後者は 処理を呼ばず exit 3。
+
   - id: TC-OUT-RUNTOOL-MISSING
     requirement: REQ-OUT-TOOL-ENV
     behavior: RunTool は 宣言に合わない環境で 足りない物を名乗って終わり 処理を呼ばない。

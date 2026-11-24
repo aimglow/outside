@@ -82,6 +82,10 @@ type Base struct {
 	Proc Proc
 	// Workdir は 置き場を受けて 作業場の口を返す。置き場が無ければ 誤り。
 	Workdir func(root string) (Workdir, error)
+	// EnsureWorkdir は repo の中の相対 path の置き場を 無ければ作って 作業場の口を返す。
+	// 宣言が repo の中の相対 path の時だけ使う ($NAME の置き場は 機体が用意する物ゆえ Workdir で 無ければ誤り)。
+	// nil なら Workdir と同じ。
+	EnsureWorkdir func(root string) (Workdir, error)
 }
 
 var versionRe = regexp.MustCompile(`\d+(\.\d+)*`)
@@ -168,6 +172,7 @@ func RunToolWith(decl Decl, base Base, fn func(Set) error) (err error) {
 
 // resolveWorkdir は workdir_root を置き場へ直し 作業場の口を作る。誤りの文は 足りない物を名乗る。
 func resolveWorkdir(root string, base Base) (Workdir, error) {
+	open := base.Workdir
 	if ref, ok := strings.CutPrefix(root, "$"); ok {
 		name, sub, _ := strings.Cut(ref, "/")
 		v, found := base.Env.Lookup(name)
@@ -188,8 +193,11 @@ func resolveWorkdir(root string, base Base) (Workdir, error) {
 			return nil, fmt.Errorf("workdir_root %s (根の外)", root)
 		}
 		root = c
+		if base.EnsureWorkdir != nil {
+			open = base.EnsureWorkdir
+		}
 	}
-	w, err := base.Workdir(root)
+	w, err := open(root)
 	if err != nil {
 		return nil, fmt.Errorf("workdir_root %s (置き場が無い: %v)", root, err)
 	}

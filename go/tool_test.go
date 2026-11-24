@@ -37,7 +37,7 @@ func newWorld(t *testing.T, head string) *mockWorld {
 		t.Fatal(err)
 	}
 	return &mockWorld{
-		env: outsidemock.NewEnv(map[string]string{"ALLOWED": "yes", "OTHER": "hidden", "WORK_ROOT": "work", "DATA_ROOT": "."}),
+		env: outsidemock.NewEnv(map[string]string{"ALLOWED": "yes", "OTHER": "hidden", "WORK_ROOT": "work", "DATA_ROOT": ".", "MISSING_ROOT": "nowork"}),
 		fs:  fsys,
 		git: outsidemock.NewGit(outsidemock.GitValues{Head: head}),
 		proc: outsidemock.NewProc(map[string]func(outside.Cmd) outside.Result{
@@ -56,6 +56,14 @@ func (w *mockWorld) base() outside.Base {
 		Proc:  w.proc,
 		Workdir: func(root string) (outside.Workdir, error) {
 			wd, err := outsidemock.NewWorkdir(root, root == "work")
+			if err != nil {
+				return nil, err
+			}
+			w.workdirs = append(w.workdirs, wd)
+			return wd, nil
+		},
+		EnsureWorkdir: func(root string) (outside.Workdir, error) {
+			wd, err := outsidemock.NewWorkdir(root, true)
 			if err != nil {
 				return nil, err
 			}
@@ -91,8 +99,8 @@ func TestRunTool_TC_OUT_RUNTOOL_MISSING(t *testing.T) {
 			want: []string{"toolx", "2.90"},
 		},
 		{
-			name: "作業場の置き場が無い",
-			decl: outside.Decl{WorkdirRoot: "nowork"},
+			name: "環境変数が指す 作業場の置き場が無い",
+			decl: outside.Decl{WorkdirRoot: "$MISSING_ROOT"},
 			head: "abc",
 			want: []string{"nowork"},
 		},
@@ -357,7 +365,9 @@ func TestRunToolReal_OK(t *testing.T) {
 
 // real の RunTool は 宣言が無い・読めない・環境が合わない時 処理を呼ばず 判定不能で終わる。
 func TestRunToolReal_Undetermined(t *testing.T) {
-	_, missingRoot := writeTool(t, "fs_roots = [\"nodata\"]\nworkdir_root = \"nowork\"\n")
+	// 環境変数が指す置き場は 機体が用意する物 = 無ければ作らず 判定不能 (test が作った dir の下の 在らない path を指させる)。
+	missingDir, missingRoot := writeTool(t, "fs_roots = [\"nodata\"]\nworkdir_root = \"$OUTSIDE_TEST_WORK_ROOT\"\n")
+	t.Setenv("OUTSIDE_TEST_WORK_ROOT", filepath.Join(missingDir, "nowork"))
 	_, unknownKey := writeTool(t, "no_such_field = true\n")
 	noFile := filepath.Join(t.TempDir(), "outside.toml")
 	for name, declPath := range map[string]string{"dir が無い": missingRoot, "知らない項目": unknownKey, "宣言が無い": noFile} {
@@ -381,5 +391,51 @@ func TestRunToolReal_Undetermined(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), word) {
 			t.Errorf("誤りの文 %v に %q が無い", err, word)
 		}
+	}
+}
+
+// TC-OUT-WORKDIR-REPO-ENSURE: repo の中の相対 path の置き場は 無ければ作る (新しい clone でも回る)。
+// 作った置き場は 宣言の dir の下にあり、処理は 1 回 呼ばれる。
+func TestRunToolReal_TC_OUT_WORKDIR_REPO_ENSURE(t *testing.T) {
+	dir, declPath := writeTool(t, "workdir_root = \".work/tool\"\n")
+	if _, err := os.Stat(filepath.Join(dir, ".work")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("前提: 置き場が既に在る: %v", err)
+	}
+	called := 0
+	err := outside.RunTool(declPath, func(s outside.Set) error {
+		called++
+		p, err := s.Workdir.New("job")
+		if err != nil {
+			t.Errorf("Workdir.New = %v", err)
+		}
+		if rel, err := filepath.Rel(filepath.Join(dir, ".work", "tool"), p); err != nil || rel != "job" {
+			t.Errorf("作業場 %q が 置き場の直下でない", p)
+		}
+		return nil
+	})
+	if err != nil || called != 1 {
+		t.Fatalf("RunTool = %v, 呼ばれた回数 %d", err, called)
+	}
+	if info, err := os.Stat(filepath.Join(dir, ".work", "tool")); err != nil || !info.IsDir() {
+		t.Errorf("置き場が作られていない: %v", err)
+	}
+}
+
+// TC-OUT-WORKDIR-REPO-ENSURE (mock): mock の base でも repo の中の相対 path は 在らなくても通り $NAME の置き場は 無ければ判定不能。
+func TestRunTool_TC_OUT_WORKDIR_REPO_ENSURE_Mock(t *testing.T) {
+	w := newWorld(t, "abc")
+	called := 0
+	if err := outside.RunToolWith(outside.Decl{WorkdirRoot: "newwork"}, w.base(), func(s outside.Set) error {
+		called++
+		if p, err := s.Workdir.New("job"); err != nil || p != "newwork/job" {
+			t.Errorf("Workdir.New = %q, %v", p, err)
+		}
+		return nil
+	}); err != nil || called != 1 {
+		t.Fatalf("RunToolWith = %v, 呼ばれた回数 %d", err, called)
+	}
+	err := outside.RunToolWith(outside.Decl{WorkdirRoot: "$MISSING_ROOT"}, w.base(), func(outside.Set) error { return nil })
+	if code := outside.ExitCode(err); code != outside.ExitUndetermined {
+		t.Errorf("$NAME の置き場が無いのに exit %d (want %d)", code, outside.ExitUndetermined)
 	}
 }

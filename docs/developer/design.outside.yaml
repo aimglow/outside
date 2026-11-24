@@ -61,7 +61,8 @@ requirements:
   - id: REQ-OUT-WORKDIR
     text: >
       作業場は 宣言した置き場の下に作る。system の一時置き場 (/tmp・os.TempDir・MkdirTemp(""))
-      を使わない。宣言した置き場が無ければ 誤りで終わる。
+      を使わない。置き場が repo の中の相対 path なら 無ければ作る (checkout の中ゆえ どの機体でも 新しい clone でも 同じ形で成り立つ)。
+      置き場が $NAME (環境変数) で指す物なら 機体が用意する物ゆえ 無ければ作らず 誤りで終わる (知らない場所に dir を作らない)。
   - id: REQ-OUT-NO-ABSPATH
     text: repo の外の絶対 path を code と test に書かない。置き場は tool-environment の宣言から受け取る。
   - id: REQ-OUT-SECRET
