@@ -32,13 +32,13 @@
 
 ## 3. `libs/platform`（adapters 層）の分け方と棲み分け
 
-adapters 層は **外部の依存先（target）ごとに 1 つの lib** に分ける。名前は `<機能>-<依存先>-<言語>`（例: `pg-postgres-go`・`authn-google-iap-go`・`git-cli-go`・`podman-cli-go`）。外部の依存先ごとに分けるので、ある依存先の版や挙動が変わっても 他の lib と それに依らないアプリの検査は回らない。実外部に触れるテストは その lib の中だけに置く。
+adapters 層は **外部の依存先（target）ごとに 1 つの lib** に分ける。名前は `<機能>-<依存先>-<言語>`（例: `db-postgres-go`・`authn-google-iap-go`・`vcs-git-go`・`container-podman-go`。語の正本 = `lint-platform/naming/rules.go`）。外部の依存先ごとに分けるので、ある依存先の版や挙動が変わっても 他の lib と それに依らないアプリの検査は回らない。実外部に触れるテストは その lib の中だけに置く。
 
 Nx モノレポ内のアダプタ配置は、再利用範囲によって 2 段階に分けます。
 
 - **`libs/platform/<feature>/`（複数アプリ共有アダプタ）**
   - 複数のアプリやサービスで同一仕様を共有する外部境界。
-  - 例: `auth-cookie`（Next.js / Angular 共通の Cookie セキュリティ属性仕様）、`ledger-client`（機体間キャッシュ台帳へのアクセス境界）、`llm-gateway`（LLM API 呼び出し境界）。
+  - 例: `authn-cookie-next`（Cookie セキュリティ属性の仕様）、`ipc-unix-socket-go`（セッション間 IPC の境界）。名前の形と語は `lint-platform/naming/rules.go` が正本。
 - **`apps/<app>/src/platform/<feature>/`（単一アプリ固有アダプタ）**
   - そのアプリケーションでしか使わない外部連携やフレームワーク境界。
   - 例: 特定アプリ専用の Flutter ネイティブプラグインラッパー、特定業務システムのレガシー SOAP/REST クライアント。

@@ -3,6 +3,7 @@
 package naming
 
 // Runtimes は <runtime> に使ってよい語 (outside の口の部品と 1 対 1)。足すのは outside 門番。
+// next = Node で動く TypeScript (Next.js に限らない。Node だけで動く lib も next)、angular = browser、flutter = iOS・Android。
 var Runtimes = []string{"go", "next", "angular", "flutter"}
 
 // CommonCapabilities は 全 project 共通の <機能> の語。足すのは outside 門番 (2 つ以上の project が使う語)。
@@ -10,6 +11,7 @@ var Runtimes = []string{"go", "next", "angular", "flutter"}
 var CommonCapabilities = []string{
 	"authn", "db", "vcs", "container", "migrate", "schema",
 	"config", "log", "http", "kv", "ipc", "remote",
+	"mail", "push", "storage", "secret", "pdf", "trace",
 }
 
 // VagueWords は 中身を表さない語。共通の表にも project の宣言にも 置けない。

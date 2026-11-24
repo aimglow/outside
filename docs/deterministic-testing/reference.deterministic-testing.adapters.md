@@ -16,8 +16,9 @@
 | :--- | :--- |
 | `<機能>` | 全 project 共通の語の正本 = `outside` の `lint-platform/naming/rules.go`。project 固有の語は repo の根の `outside-platform.toml` の `capabilities` に宣言する（その project の review で決める）。 |
 | `<依存先>` | 外部の製品・プロトコルの名前（小文字・`-` 区切り。例: `postgres`・`google-iap`・`cloudflare-access`・`git`・`podman`・`atlas`・`buf`・`ssh`・`shared-preferences`）。 |
-| `<runtime>` | `go`・`next`・`angular`・`flutter` のどれか（`outside` の部品と同じ 4 つ）。 |
+| `<runtime>` | `go`・`next`・`angular`・`flutter` のどれか（`outside` の部品と同じ 4 つ）。Node で動く TypeScript は Next.js でなくても `next`（Node だけで動く lib も `next`）。 |
 
+- adapters 層に置くのは real が外（通信・file・子 process・機体の値）を触る lib だけ。外を触らない部品（形式の変換・計算・集計など 値を受けて値を返すだけの物）は real と mock に分ける意味が無いので adapters ではなく 業務の側の lib に置く（mock を作らず そのまま test する）。外を触る部分と触らない部分を持つ物は 触る部分だけを adapters の lib に切り出す。
 - lib を作るのは 依存先に固有の取り決め（出力や答えの形・終了コードの意味・protocol・認証・状態）を読み書きする時だけ。コマンドを起こして終了コードを見るだけなら `outside` の子 process の口（Go = `Proc`）を直に使い lib を作らない（test は Proc の mock を渡す）。同じ取り決めを 2 か所以上が読み解いていたら 1 つの lib にまとめる。
 - 1 lib = 1 依存先（機械で判定できない = lib を足す変更の 設計の review で見る）。機能に `common`・`util`・`shared`・`helper` 等の 中身を表さない語を使わない（検査が拒む）。
 - 依存先の実物を起こす test の部品（例: 決めた版の DB を起こす部品）は その依存先の lib の 結合テストの中に置き、独立の lib にしない。
@@ -31,7 +32,7 @@ AI に `adapters/` の作成を許可すると、手抜きをして **`Mock` 実
 これを防ぐため、すべてのアダプタは必ず以下の **3 ファイル構造** に分割し、`real` だけに生の外部 API 利用を許可します。
 
 ```text
-libs/platform/auth-cookie/
+libs/platform/authn-cookie-next/
 ├── interface.ts   # 純粋な型・インターフェース定義のみ（依存ゼロ）
 ├── real.ts        # 【唯一許可】Next.js cookies() やブラウザ API を呼ぶ薄い接着剤
 └── mock.ts        # 【厳格制限】インメモリ実装。ビジネスロジックと同等のLint制限を受ける
@@ -47,12 +48,12 @@ Go / Dart の場合のファイル命名規則：
 
 ---
 
-## 2. パターン①：Next.js Cookie アダプタ（`libs/platform/auth-cookie`）
+## 2. パターン①：Next.js Cookie アダプタ（`libs/platform/authn-cookie-next`）
 
 プロジェクトやステージごとに属性や運用が変わる Cookie は `outside` ではなく `adapters` で隔離します。
 
 ```typescript
-// libs/platform/auth-cookie/interface.ts
+// libs/platform/authn-cookie-next/interface.ts
 export interface CookieOptions {
   httpOnly: boolean;
   secure: boolean;
@@ -69,7 +70,7 @@ export interface AuthCookieAdapter {
 ```
 
 ```typescript
-// libs/platform/auth-cookie/real.ts
+// libs/platform/authn-cookie-next/real.ts
 import { cookies } from 'next/headers';
 import type { AuthCookieAdapter, CookieOptions } from './interface';
 
@@ -100,7 +101,7 @@ export class NextAuthCookieAdapter implements AuthCookieAdapter {
 ```
 
 ```typescript
-// libs/platform/auth-cookie/mock.ts
+// libs/platform/authn-cookie-next/mock.ts
 import type { AuthCookieAdapter, CookieOptions } from './interface';
 
 export class MockAuthCookieAdapter implements AuthCookieAdapter {

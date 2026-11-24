@@ -20,7 +20,7 @@ func vocab(t *testing.T, declared ...string) Vocab {
 func TestCheck_TC_OUT_LINT_PLATFORM(t *testing.T) {
 	goLib := []string{"adapter_mock.go", "adapter_real.go", "interface.go"}
 	bad := func(n string) Finding {
-		return Finding{n, "名前が <機能>-<依存先>-<runtime> の形でない (機能 = authn|config|container|db|http|ipc|kv|log|migrate|remote|schema|vcs、runtime = go|next|angular|flutter。project 固有の機能は outside-platform.toml に宣言する)"}
+		return Finding{n, "名前が <機能>-<依存先>-<runtime> の形でない (機能 = authn|config|container|db|http|ipc|kv|log|mail|migrate|pdf|push|remote|schema|secret|storage|trace|vcs、runtime = go|next|angular|flutter。project 固有の機能は outside-platform.toml に宣言する)"}
 	}
 	cases := []struct {
 		name     string
@@ -81,9 +81,9 @@ func TestRulesTable_TC_OUT_LINT_PLATFORM_TABLE(t *testing.T) {
 // TC-OUT-LINT-PLATFORM-VOCAB
 func TestVocab_TC_OUT_LINT_PLATFORM_VOCAB(t *testing.T) {
 	goLib := []string{"adapter_mock.go", "adapter_real.go", "interface.go"}
-	r := Check([]Entry{{Name: "pay-stripe-go", Dir: true, Found: goLib}, {Name: "mail-ses-go", Dir: true, Found: goLib}}, vocab(t, "pay"))
-	if len(r.Violations) != 1 || r.Violations[0].Name != "mail-ses-go" {
-		t.Errorf("違反 = %v (want mail-ses-go の 1 件)", r.Violations)
+	r := Check([]Entry{{Name: "pay-stripe-go", Dir: true, Found: goLib}, {Name: "sms-twilio-go", Dir: true, Found: goLib}}, vocab(t, "pay"))
+	if len(r.Violations) != 1 || r.Violations[0].Name != "sms-twilio-go" {
+		t.Errorf("違反 = %v (want sms-twilio-go の 1 件)", r.Violations)
 	}
 	for _, w := range []string{"util", "Pay", "pay-x"} {
 		if _, err := NewVocab([]string{w}); err == nil {

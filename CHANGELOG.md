@@ -193,3 +193,12 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 - lint-platform: `outside-platform.toml` に `adapter_dirs` を書ける (check・scaffold・tests が同じ宣言を読む)。`.`・空・絶対 path・根の外は 判定不能。前の版の lint-platform は adapter_dirs を知らない key として 判定不能にする = 宣言を書くのは v0.2.0 を取り込んでから。
 - docs: enforcement.md §4.2 に 検査と段の宣言の形を足した。
 - 利用する側がやる事: lint-platform を v0.2.0 に上げ、push の前の検査に段を 1 つ宣言する (run と reads = enforcement.md §4.2)。libs/platform 以外に adapter の dir が在れば adapter_dirs に書く。違反は 本物の外部に触れる test を libs/platform/<lib> か 宣言した dir へ移すか mock だけで書き直す。
+
+## lint-platform/v0.3.0・docs/v0.10.0 (2026-11-25)
+
+- lint-platform: 共通の機能の語に `mail`・`push`・`storage`・`secret`・`pdf`・`trace` を足した (業務を含まない技術の語。業務の語 (例 inventory) は 共通に入れず 各 project の outside-platform.toml に宣言する = 門番規約 §1-2)。語を足すだけ = 今まで通っていた名前は そのまま通る。
+- 決め (amatelas #1399 の問い):
+  - runtime の語は 部品と 1 対 1 のまま。Node で動く TypeScript は Next.js でなくても `next` (Node だけで動く lib も `-next`)。`node` は足さない。
+  - adapters 層に置くのは real が外 (通信・file・子 process・機体の値) を触る lib だけ。外を触らない部品 (形式の変換・計算・集計) は 業務の側の lib に置く (mock を作らず そのまま test する)。触る部分と触らない部分を持つ物は 触る部分だけを切り出す (adapters.md §0)。
+- docs: architecture.md・adapters.md の lib の名前の例を lint-platform の規則に通る形 (db-postgres-go・vcs-git-go・container-podman-go・authn-cookie-next 等) に直した (規則の正本は rules.go)。adapters.md §0 に 上の 2 つの決めを足した。
+- 利用する側がやる事: lint-platform を v0.3.0 に上げると 6 つの語を outside-platform.toml から外せる (宣言に残しても誤りではない)。docs は docs/v0.10.0。

@@ -205,8 +205,8 @@ cases:
   - id: TC-OUT-LINT-PLATFORM-VOCAB
     requirement: REQ-OUT-PLATFORM-LAYOUT
     behavior: project の宣言の語は 共通の語と同じく通る。宣言に無い語は 違反。中身を表さない語の宣言は 判定不能 (exit 3)。
-    input: outside-platform.toml の capabilities = ["pay"] と pay-stripe-go / mail-ses-go の lib。宣言 ["util"]。
-    expect: pay-stripe-go は通る。mail-ses-go は 違反。util の宣言は 語を名指して exit 3。
+    input: outside-platform.toml の capabilities = ["pay"] と pay-stripe-go / sms-twilio-go の lib。宣言 ["util"]。
+    expect: pay-stripe-go は通る。sms-twilio-go は 違反。util の宣言は 語を名指して exit 3。
 
   - id: TC-OUT-LINT-PLATFORM-SCAFFOLD
     requirement: REQ-OUT-PLATFORM-LAYOUT
