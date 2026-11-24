@@ -20,26 +20,26 @@ outside は 全 project が module として取り込む共通部品である。
   tag の無い code の変更を main に残さない。文書だけの変更は 版を上げない。
 - commit の message は 何を・なぜ を 1 行目に書く。
 
-## 使われ方
+## 編集する者
 
-- 利用する project は この repo を 版を固定した module として取り込む (持ち主の決め = ccark #9758 の comment『決めた進め方』)。
-  - Go と Dart は 版の git の tag を指す依存として書く (Go = go.mod の `require github.com/aimglow/outside/go vX.Y.Z`、
-    Dart = pubspec の git 依存の `ref: vX.Y.Z`)。project の中に この repo の file を複製しない。
-  - TypeScript は Nx の共有 library として 版の git の tag から取得して置く。取得の仕組み (clone の形) と 版の記録の形は 未決
-    (kifune で確かめて この節に書く)。
-  - git から取得するのは ccark-gitops の名義。seat の検査も image の build (gitops) も この名義で取る。
-    人の資格も project ごとの道具も使わない。
-- project の code は 外を直に呼ばず この部品の口 (port) を通す。
+- この repo を編集するのは 常駐の **outside 門番** (`outside-gatekeeper`、solviento) だけ。役の規約 = ccark の `agents/outside-gatekeeper.md`、
+  門番規約 = `docs/deterministic-testing/08_agents_md_outside_gatekeeper.md`。
+- 各 project の seat は この repo を直に編集しない。口や method が足りない時は 門番へ `ccark send` で依頼する
+  (書式 = `docs/deterministic-testing/07_agents_md_app_template.md` §4)。
+
+## 使われ方 (取り込みの流れ)
+
+正本 = `docs/deterministic-testing/` (README と 01〜09)。
+
+1. project の seat が 門番へ依頼する。
+2. 門番が 門番規約に照らして審査し、Real・Mock・両面の test を実装し、`./scripts/release.sh <major|minor|patch>` で test を回して tag を切る。
+3. 門番が `RELEASE_SUCCESS: <tag>` を 依頼元へ `ccark send` で返す。
+4. 依頼元が `./scripts/sync-outside.sh <go|next|angular|flutter|all> <tag>` で この repo の tag を `git archive` し
+   `libs/outside/<target>` へ展開する (展開先は丸ごと置き換え、`.outside-version` に tag を記録する)。
+5. 依頼元は 展開した `libs/outside/<target>` を編集しない。この部品の test は 展開先では回さない (Nx の project として test の target を持たせない)。
+
 - 版は tag で固定して使う。main を追わない。全 project が 同じ版を使う。
-- project に入れた この部品は project の中で編集しない。直すのは この repo だけ。
-- project に入れるのは 実装と mock だけ。この部品の test は project で回さない。
-
-### project への組み込み方と 版を上げた時の適用の手順
-
-この節は kifune で実物を確かめた後に書く。確かめる前の手順を ここに書かない。
-確かめる事 = (1) 言語ごとの取り込み (Go の module / TypeScript を Nx の共有 library として / Dart の package) が
-tag の中身と一致して入る (2) この部品の test が project の検査で走らない (3) 版を上げた時に 同じ手順で入れ替わり
-project の検査が 変わった物に依る分だけ回る (4) image の build の場所から取り込める (5) 外を直に呼ぶ code を lint が落とす。
+- 外部依存の test は この repo (Real の自己検証) と 各 project の adapters 層 (`libs/platform/<機能>-<依存先>-<言語>`) の中だけ。
 
 ## 部品の足し方
 
