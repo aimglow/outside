@@ -362,7 +362,7 @@ versioning:
     fetch_from: https://github.com/aimglow/outside.git
     fetch_identity: git から取得するのは ccark-gitops の名義 (seat の検査も image の build (gitops) も 同じ)。
     go: project の go.mod は replace で libs/outside/go を指す (module path は github.com/aimglow/outside/go のまま)。
-    lint_platform: 各 project の push の前の検査の 1 段 = go -C libs/outside/lint-platform run . check --root ../../platform --vocab ../../../outside-platform.toml。読む物 = libs/platform/**・libs/outside/lint-platform/**・outside-platform.toml。
+    lint_platform: 各 project の push の前の検査の 1 段 = GOWORK=off go -C libs/outside/lint-platform build -o ../../../.work/bin/lint-platform . && .work/bin/lint-platform check --root libs/platform --vocab outside-platform.toml (tests も同じ道具)。GOWORK=off = 根の go.work に依らず build する。go run は 道具の exit 3 を 1 に潰すので使わない (実測)。読む物 = libs/platform/**・libs/outside/lint-platform/**・outside-platform.toml。
     check: >
       sync-outside.sh --check <部品> (repo の根で実行。網に行かない)。exit 0 = 指紋が一致 / 1 = 違う (違う・増えた・消えた file を名指す。記録の行が全体の指紋と合わない も ここ) /
       3 = 判定不能 (置き場か .outside-version が無い・指紋の行が無い = 指紋を書く前の sync-outside.sh で置いた写し。取り込み直す)。

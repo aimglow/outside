@@ -206,3 +206,10 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 ## docs/v0.10.1 (2026-11-25)
 
 - docs: enforcement.md・non-deterministic.md に残っていた 古い lib の名前 (adapters/auth-cookie・adapters/llm-gateway) を 規則に通る形の例へ直した (文の直しだけ)。
+
+## docs/v0.11.0 (2026-11-25)
+
+- docs (enforcement.md §4.1・§4.2): lint-platform の撃ち方を 直した。repo の根で `GOWORK=off go -C libs/outside/lint-platform build -o ../../../.work/bin/lint-platform .` で道具を作り `.work/bin/lint-platform check|tests|scaffold …` で撃つ。
+  - 理由 1: repo の根に go.work を持つ project では `go -C libs/outside/lint-platform run .` が build できない (go.work が その dir を包まない。kifune の実測)。`GOWORK=off` で lint-platform 自身の module と vendor で build する。
+  - 理由 2: `go run` は 道具の exit 3 (判定不能) を exit 1 に潰す (門番の実測) = 判定不能が違反に見える。build した道具は 0・1・3 をそのまま返す。
+- 利用する側がやる事: push の前の段の run を 新しい形に替える (lint-platform の版は変わらない)。`.work/` を .gitignore に入れる。別の撃ち方 (go.mod の tool 等) を取るなら 判定不能の宣言で exit 3 が返る事を 1 度確かめる。
