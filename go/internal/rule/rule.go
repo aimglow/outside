@@ -33,3 +33,8 @@ func WorkdirName(name string) error {
 	}
 	return nil
 }
+
+// Within は 整えた相対 path p が dir そのものか その下に在るかを返す。dir が "." なら 全て。
+func Within(p, dir string) bool {
+	return dir == "." || p == dir || strings.HasPrefix(p, dir+"/")
+}

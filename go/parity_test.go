@@ -12,10 +12,10 @@ import (
 // TC-OUT-PARITY: 部品 go の口と method の名前の組が 設計書の ports.backend_and_tools と一致する。
 // 期待の表は 設計書の ports.backend_and_tools を写した物 (設計書の file は test から読まない)。
 var designPorts = map[string][]string{
-	"Clock":   {"Now", "Sleep"},
+	"Clock":   {"Now", "Sleep", "NewTimer", "NewTicker", "After"},
 	"Env":     {"Lookup"},
-	"FS":      {"ReadFile", "WriteFile", "ReadDir", "Stat", "Remove"},
-	"Proc":    {"Run"},
+	"FS":      {"ReadFile", "WriteFile", "ReadDir", "Stat", "Remove", "Open", "AppendFile", "MkdirAll", "Lstat", "Rename", "RemoveAll"},
+	"Proc":    {"Run", "LookPath"},
 	"Workdir": {"New", "Path", "Cleanup", "FS"},
 	"SysInfo": {"Hostname", "HomeDir", "Pid", "IsTTY"},
 	"IdGen":   {"NewID"},

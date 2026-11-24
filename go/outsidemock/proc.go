@@ -3,6 +3,7 @@ package outsidemock
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"sync"
 
 	"github.com/aimglow/outside/go"
@@ -13,6 +14,7 @@ type Proc struct {
 	recorder
 	programs map[string]func(outside.Cmd) outside.Result
 	mu       sync.Mutex
+	paths    map[string]string
 	cmds     []outside.Cmd
 }
 
@@ -38,6 +40,33 @@ func NewProc(programs map[string]func(outside.Cmd) outside.Result) *Proc {
 		m[k] = v
 	}
 	return &Proc{programs: m}
+}
+
+// WithPaths は LookPath が返す path (名前 → 実行 file の path) を渡し p を返す。前に渡した表は 置き換わる。
+// 表に無い名前の LookPath は 見つからない誤り (errors.Is(err, exec.ErrNotFound))。
+func (p *Proc) WithPaths(paths map[string]string) *Proc {
+	m := make(map[string]string, len(paths))
+	for k, v := range paths {
+		m[k] = v
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.paths = m
+	return p
+}
+
+// LookPath は WithPaths で渡した path を返す。NewProc で宣言していない名前は ErrUndeclaredProgram。
+func (p *Proc) LookPath(name string) (string, error) {
+	p.record("LookPath", name)
+	if _, ok := p.programs[name]; !ok {
+		return "", fmt.Errorf("%w: %s", outside.ErrUndeclaredProgram, name)
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if file, ok := p.paths[name]; ok && file != "" {
+		return file, nil
+	}
+	return "", fmt.Errorf("outsidemock: program %s の path が渡されていない: %w", name, exec.ErrNotFound)
 }
 
 // Fixed は 引数に依らず r を返す関数を作る。

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"path"
 	"regexp"
 	"sort"
@@ -291,6 +292,59 @@ func (f limitFS) Remove(p string) error {
 	return f.inner.Remove(c)
 }
 
+func (f limitFS) Open(p string) (io.ReadCloser, error) {
+	c, err := f.check(p)
+	if err != nil {
+		return nil, err
+	}
+	return f.inner.Open(c)
+}
+
+func (f limitFS) AppendFile(p string, data []byte) error {
+	c, err := f.check(p)
+	if err != nil {
+		return err
+	}
+	return f.inner.AppendFile(c, data)
+}
+
+func (f limitFS) MkdirAll(p string) error {
+	c, err := f.check(p)
+	if err != nil {
+		return err
+	}
+	return f.inner.MkdirAll(c)
+}
+
+func (f limitFS) Lstat(p string) (FileInfo, error) {
+	c, err := f.check(p)
+	if err != nil {
+		return FileInfo{}, err
+	}
+	return f.inner.Lstat(c)
+}
+
+// Rename は 移す元と 移し先の 両方が 宣言した根の下に在る事を確かめる。
+func (f limitFS) Rename(from, to string) error {
+	cf, err := f.check(from)
+	if err != nil {
+		return err
+	}
+	ct, err := f.check(to)
+	if err != nil {
+		return err
+	}
+	return f.inner.Rename(cf, ct)
+}
+
+func (f limitFS) RemoveAll(p string) error {
+	c, err := f.check(p)
+	if err != nil {
+		return err
+	}
+	return f.inner.RemoveAll(c)
+}
+
 // limitProc は 宣言した program だけを起こさせる。
 type limitProc struct {
 	inner Proc
@@ -302,6 +356,13 @@ func (p limitProc) Run(ctx context.Context, cmd Cmd) (Result, error) {
 		return Result{}, fmt.Errorf("%w: %s", ErrUndeclaredProgram, cmd.Name)
 	}
 	return p.inner.Run(ctx, cmd)
+}
+
+func (p limitProc) LookPath(name string) (string, error) {
+	if !p.names[name] {
+		return "", fmt.Errorf("%w: %s", ErrUndeclaredProgram, name)
+	}
+	return p.inner.LookPath(name)
 }
 
 // noWorkdir は 置き場を宣言していない時の口。作業場を作らせない。

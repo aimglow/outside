@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -25,8 +26,22 @@ type realClock struct{}
 // NewClock は 実の時計を返す。
 func NewClock() Clock { return realClock{} }
 
-func (realClock) Now() time.Time        { return time.Now() }
-func (realClock) Sleep(d time.Duration) { time.Sleep(d) }
+func (realClock) Now() time.Time                         { return time.Now() }
+func (realClock) Sleep(d time.Duration)                  { time.Sleep(d) }
+func (realClock) NewTimer(d time.Duration) Timer         { return realTimer{time.NewTimer(d)} }
+func (realClock) NewTicker(d time.Duration) Ticker       { return realTicker{time.NewTicker(d)} }
+func (realClock) After(d time.Duration) <-chan time.Time { return time.After(d) }
+
+type realTimer struct{ t *time.Timer }
+
+func (t realTimer) C() <-chan time.Time        { return t.t.C }
+func (t realTimer) Stop() bool                 { return t.t.Stop() }
+func (t realTimer) Reset(d time.Duration) bool { return t.t.Reset(d) }
+
+type realTicker struct{ t *time.Ticker }
+
+func (t realTicker) C() <-chan time.Time { return t.t.C }
+func (t realTicker) Stop()               { t.t.Stop() }
 
 type realEnv struct{}
 
@@ -131,6 +146,126 @@ func (f realFS) Remove(p string) error {
 	return r.Remove(c)
 }
 
+func (f realFS) Open(p string) (io.ReadCloser, error) {
+	r, c, err := f.open(p)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	// Root から開いた file は Root を閉じても読める (file は 自分の記述子を持つ)。
+	file, err := r.Open(c)
+	if err != nil {
+		return nil, err
+	}
+	info, err := file.Stat()
+	if err != nil {
+		file.Close()
+		return nil, err
+	}
+	if info.IsDir() {
+		file.Close()
+		return nil, &fs.PathError{Op: "open", Path: c, Err: errors.New("dir は読めない")}
+	}
+	return file, nil
+}
+
+func (f realFS) AppendFile(p string, data []byte) error {
+	r, c, err := f.open(p)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if dir := path.Dir(c); dir != "." {
+		if err := r.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+	}
+	file, err := r.OpenFile(c, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(data); err != nil {
+		file.Close()
+		return err
+	}
+	return file.Close()
+}
+
+func (f realFS) MkdirAll(p string) error {
+	r, c, err := f.open(p)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	return r.MkdirAll(c, 0o755)
+}
+
+func (f realFS) Lstat(p string) (FileInfo, error) {
+	r, c, err := f.open(p)
+	if err != nil {
+		return FileInfo{}, err
+	}
+	defer r.Close()
+	info, err := r.Lstat(c)
+	if err != nil {
+		return FileInfo{}, err
+	}
+	switch {
+	case info.Mode()&fs.ModeSymlink != 0:
+		return FileInfo{Name: path.Base(c), IsSymlink: true}, nil
+	case info.IsDir():
+		return FileInfo{Name: path.Base(c), IsDir: true}, nil
+	}
+	return FileInfo{Name: path.Base(c), Size: info.Size()}, nil
+}
+
+func (f realFS) Rename(from, to string) error {
+	r, cf, err := f.open(from)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	ct, err := rule.CleanRel(to)
+	if err != nil {
+		return err
+	}
+	if cf == "." || ct == "." {
+		return renameErr(cf, ct, errors.New("根は移せない"))
+	}
+	src, err := r.Lstat(cf)
+	if err != nil {
+		return err
+	}
+	if cf == ct {
+		return nil
+	}
+	if src.IsDir() && rule.Within(ct, cf) {
+		return renameErr(cf, ct, errors.New("dir を 自分の下へは移せない"))
+	}
+	// 移し先の dir は 置き換えない (os.Rename と同じ。OS ごとの違いを出さない)。
+	if dst, err := r.Lstat(ct); err == nil && dst.IsDir() {
+		return renameErr(cf, ct, errors.New("移し先に dir が在る"))
+	}
+	return r.Rename(cf, ct)
+}
+
+// renameErr は Rename が 自分で止めた誤り (mock と同じ形)。
+func renameErr(from, to string, err error) error {
+	return &fs.PathError{Op: "rename", Path: from + " -> " + to, Err: err}
+}
+
+func (f realFS) RemoveAll(p string) error {
+	r, c, err := f.open(p)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if c == "." {
+		return &fs.PathError{Op: "removeall", Path: c, Err: errors.New("根は消せない")}
+	}
+	return r.RemoveAll(c)
+}
+
 type realSysInfo struct{}
 
 // NewSysInfo は 動いている機体と process の値を返す口を返す。
@@ -218,6 +353,27 @@ func NewProc(programs map[string]string) Proc {
 		m[k] = v
 	}
 	return realProc{programs: m}
+}
+
+// LookPath は 宣言の path を返す。path が空の名前は PATH から探す。実行 file が無ければ exec.ErrNotFound の仲間の誤り。
+func (p realProc) LookPath(name string) (string, error) {
+	file, ok := p.programs[name]
+	if !ok {
+		return "", fmt.Errorf("%w: %s", ErrUndeclaredProgram, name)
+	}
+	if file == "" {
+		found, err := exec.LookPath(name)
+		if err != nil {
+			// exec.LookPath の誤りは errors.Is(err, exec.ErrNotFound) で判る。
+			return "", fmt.Errorf("outside: program %s が見つからない: %w", name, err)
+		}
+		return found, nil
+	}
+	// 宣言の path は 実行できる file かを確かめる (path を持つ名前は exec.LookPath が PATH を探さず その file を見る)。
+	if _, err := exec.LookPath(file); err != nil {
+		return "", fmt.Errorf("outside: program %s (%s) が見つからない: %w: %v", name, file, exec.ErrNotFound, err)
+	}
+	return file, nil
 }
 
 // Run は 子 process を起こす。子は 親の環境変数に cmd.Env を足した物を受ける。

@@ -43,6 +43,147 @@ func TestClockMock_TC_OUT_CLOCK_MOCK(t *testing.T) {
 	}
 }
 
+// TC-OUT-CLOCK-TIMER (mock): Advance・Sleep で 期限を過ぎた物を 期限の順に発火し 送る値は その期限の時刻。
+// Ticker は 過ぎた回数だけ発火を試み buffer 1 を超えた分は落ちる。実時間を待たない。
+func TestClockMock_TC_OUT_CLOCK_TIMER(t *testing.T) {
+	start := time.Date(2000, 1, 2, 3, 4, 5, 0, time.UTC)
+	at := func(d time.Duration) time.Time { return start.Add(d) }
+	got := func(ch <-chan time.Time) (time.Time, bool) {
+		select {
+		case v := <-ch:
+			return v, true
+		default:
+			return time.Time{}, false
+		}
+	}
+	expect := func(ch <-chan time.Time, want time.Time, what string) {
+		t.Helper()
+		if v, ok := got(ch); !ok || !v.Equal(want) {
+			t.Errorf("%s = %v, %v (want %v)", what, v, ok, want)
+		}
+	}
+	empty := func(ch <-chan time.Time, what string) {
+		t.Helper()
+		if v, ok := got(ch); ok {
+			t.Errorf("%s が届いた: %v", what, v)
+		}
+	}
+
+	c := outsidemock.NewClock(start)
+	t2 := c.NewTimer(2 * time.Second)
+	t5 := c.NewTimer(5 * time.Second)
+	a3 := c.After(3 * time.Second)
+	tk := c.NewTicker(time.Second)
+	c.Advance(4 * time.Second)
+	expect(t2.C(), at(2*time.Second), "2 秒の Timer")
+	expect(a3, at(3*time.Second), "3 秒の After")
+	empty(t5.C(), "5 秒の Timer (期限前)")
+	// Ticker は 1・2・3・4 秒の 4 回を試み 受け手が読まないので 2 回目からは落ちた。
+	expect(tk.C(), at(time.Second), "Ticker の最初")
+	empty(tk.C(), "落ちた Ticker の発火")
+	if now := c.Now(); !now.Equal(at(4 * time.Second)) {
+		t.Errorf("Advance の後の Now = %v", now)
+	}
+	// Sleep でも発火する。Ticker の次は 5 秒。
+	c.Sleep(time.Second)
+	expect(t5.C(), at(5*time.Second), "Sleep で期限を過ぎた Timer")
+	expect(tk.C(), at(5*time.Second), "Ticker の 5 秒")
+	// 期限ちょうどまで進めると 発火する (期限を過ぎた = 期限の時刻 以上)。
+	c.Advance(time.Second)
+	expect(tk.C(), at(6*time.Second), "Ticker の 6 秒")
+
+	// Stop・Reset の戻りは time と同じ意味。
+	if t2.Stop() {
+		t.Error("発火済みの Stop が true")
+	}
+	t9 := c.NewTimer(3 * time.Second) // 期限 9 秒
+	if !t9.Reset(time.Second) {       // 期限 7 秒へ
+		t.Error("動いている Timer の Reset が false")
+	}
+	c.Advance(time.Second)
+	expect(t9.C(), at(7*time.Second), "Reset した Timer")
+	c.Advance(5 * time.Second)
+	empty(t9.C(), "Reset 前の期限")
+	if t2.Reset(time.Second) {
+		t.Error("済んだ Timer の Reset が true")
+	}
+	if !t2.Stop() {
+		t.Error("Reset で掛け直した Timer の Stop が false")
+	}
+	c.Advance(time.Hour)
+	empty(t2.C(), "Stop した Timer")
+	// 0 以下の期限は 掛けた時に 今の時刻を送る。
+	now := c.Now()
+	expect(c.NewTimer(0).C(), now, "0 の Timer")
+	expect(c.After(-time.Second), now, "負の After")
+	tk.Stop()
+	c.Advance(time.Hour)
+	empty(tk.C(), "Stop した Ticker")
+
+	// 1 年を 1 ミリ秒の Ticker で進めても すぐ戻る (落ちる回は 数えて飛ばす)。
+	fast := c.NewTicker(time.Millisecond)
+	began := time.Now()
+	c.Advance(365 * 24 * time.Hour)
+	if took := time.Since(began); took > 5*time.Second {
+		t.Errorf("1 年の Advance に 実時間 %v かかった", took)
+	}
+	base := now.Add(time.Hour)
+	expect(fast.C(), base.Add(time.Millisecond), "速い Ticker の最初")
+	c.Advance(time.Millisecond)
+	expect(fast.C(), base.Add(365*24*time.Hour+time.Millisecond), "速い Ticker の 1 年後の次")
+	fast.Stop()
+
+	for method, n := range map[string]int{"NewTimer": 4, "After": 2, "NewTicker": 2, "Timer.Stop": 2, "Timer.Reset": 2, "Ticker.Stop": 2} {
+		if calls := outsidemock.CallsOf(c.Calls(), method); len(calls) != n {
+			t.Errorf("%s の記録 = %d 件 (want %d): %+v", method, len(calls), n, calls)
+		}
+	}
+	if calls := outsidemock.CallsOf(c.Calls(), "NewTimer"); calls[0].Args[0] != "2s" {
+		t.Errorf("NewTimer の記録の引数 = %+v", calls[0])
+	}
+}
+
+// 並行に安全: 別の goroutine が待つ channel に Advance が届き 掛ける・止める・進めるが 重なっても壊れない。
+func TestClockMock_TimerConcurrent(t *testing.T) {
+	c := outsidemock.NewClock(time.Date(2000, 1, 2, 3, 4, 5, 0, time.UTC))
+	const n = 50
+	chans := make([]<-chan time.Time, n)
+	for i := range chans {
+		chans[i] = c.After(time.Duration(i+1) * time.Second)
+	}
+	var wg sync.WaitGroup
+	results := make(chan time.Time, n)
+	for _, ch := range chans {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results <- <-ch
+		}()
+	}
+	var churn sync.WaitGroup
+	for range 8 {
+		churn.Add(1)
+		go func() {
+			defer churn.Done()
+			for range 50 {
+				tm := c.NewTimer(time.Second)
+				tk := c.NewTicker(time.Second)
+				tm.Reset(time.Minute)
+				tm.Stop()
+				tk.Stop()
+				c.Sleep(time.Millisecond)
+			}
+		}()
+	}
+	c.Advance(time.Duration(n) * time.Second)
+	churn.Wait()
+	wg.Wait()
+	close(results)
+	if got := len(results); got != n {
+		t.Errorf("届いた数 = %d (want %d)", got, n)
+	}
+}
+
 // TC-OUT-ENV-MOCK: 渡した表の値だけを返す。機体の環境変数は 結果に現れない。
 func TestEnvMock_TC_OUT_ENV_MOCK(t *testing.T) {
 	// 機体の側に在る変数 (test が自分で置く) が mockから見えない事を見る。

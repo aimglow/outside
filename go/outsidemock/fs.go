@@ -1,8 +1,10 @@
 package outsidemock
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"path"
 	"sort"
@@ -17,7 +19,7 @@ import (
 // 末尾 / の path は 空の dir。絶対 path と 根の外へ出る path は NewFS が誤りにする。
 type Tree map[string]string
 
-// FS は memory の上の木。disk を触らない。
+// FS は memory の上の木。disk を触らない。symlink は持たない (Lstat は Stat と同じ値を返す)。
 type FS struct {
 	recorder
 	mu    sync.Mutex
@@ -184,5 +186,161 @@ func (f *FS) Remove(p string) error {
 		}
 	}
 	delete(f.dirs, c)
+	return nil
+}
+
+// Open は 中身の写しを読む stream を返す。Open の後の書き換えは 読む中身に効かない。
+func (f *FS) Open(p string) (io.ReadCloser, error) {
+	f.record("Open", p)
+	c, err := rule.CleanRel(p)
+	if err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if data, ok := f.files[c]; ok {
+		return io.NopCloser(bytes.NewReader(append([]byte(nil), data...))), nil
+	}
+	if f.dirs[c] {
+		return nil, pathErr("open", c, errors.New("dir は読めない"))
+	}
+	return nil, pathErr("open", c, fs.ErrNotExist)
+}
+
+func (f *FS) AppendFile(p string, data []byte) error {
+	f.record("AppendFile", p)
+	c, err := rule.CleanRel(p)
+	if err != nil {
+		return err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	old := f.files[c]
+	return f.put(c, append(append([]byte(nil), old...), data...))
+}
+
+func (f *FS) MkdirAll(p string) error {
+	f.record("MkdirAll", p)
+	c, err := rule.CleanRel(p)
+	if err != nil {
+		return err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.mkdirAll(c)
+}
+
+// Lstat は Stat と同じ値を返す (mock の木に symlink は無い)。
+func (f *FS) Lstat(p string) (outside.FileInfo, error) {
+	f.record("Lstat", p)
+	c, err := rule.CleanRel(p)
+	if err != nil {
+		return outside.FileInfo{}, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if data, ok := f.files[c]; ok {
+		return outside.FileInfo{Name: path.Base(c), Size: int64(len(data))}, nil
+	}
+	if f.dirs[c] {
+		return outside.FileInfo{Name: path.Base(c), IsDir: true}, nil
+	}
+	return outside.FileInfo{}, pathErr("lstat", c, fs.ErrNotExist)
+}
+
+func linkErr(from, to string, err error) error {
+	return &fs.PathError{Op: "rename", Path: from + " -> " + to, Err: err}
+}
+
+// Rename は file か dir (中身ごと) を移す。to に file が在れば 置き換え、dir が在れば 誤り。
+func (f *FS) Rename(from, to string) error {
+	f.record("Rename", from, to)
+	cf, err := rule.CleanRel(from)
+	if err != nil {
+		return err
+	}
+	ct, err := rule.CleanRel(to)
+	if err != nil {
+		return err
+	}
+	if cf == "." || ct == "." {
+		return linkErr(cf, ct, errors.New("根は移せない"))
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	data, isFile := f.files[cf]
+	if !isFile && !f.dirs[cf] {
+		return linkErr(cf, ct, fs.ErrNotExist)
+	}
+	if cf == ct {
+		return nil
+	}
+	if !isFile && rule.Within(ct, cf) {
+		return linkErr(cf, ct, errors.New("dir を 自分の下へは移せない"))
+	}
+	parent := path.Dir(ct)
+	if _, ok := f.files[parent]; ok {
+		return linkErr(cf, ct, errors.New("移し先の親が dir ではない"))
+	}
+	if !f.dirs[parent] {
+		return linkErr(cf, ct, fs.ErrNotExist)
+	}
+	if f.dirs[ct] {
+		return linkErr(cf, ct, errors.New("移し先に dir が在る"))
+	}
+	if isFile {
+		delete(f.files, cf)
+		f.files[ct] = data
+		return nil
+	}
+	if _, ok := f.files[ct]; ok {
+		return linkErr(cf, ct, errors.New("dir を file の上へは移せない"))
+	}
+	moved := func(name string) string { return ct + strings.TrimPrefix(name, cf) }
+	files := map[string][]byte{}
+	for name, d := range f.files {
+		if rule.Within(name, cf) {
+			files[moved(name)] = d
+			delete(f.files, name)
+		}
+	}
+	dirs := map[string]bool{}
+	for name := range f.dirs {
+		if rule.Within(name, cf) {
+			dirs[moved(name)] = true
+			delete(f.dirs, name)
+		}
+	}
+	for name, d := range files {
+		f.files[name] = d
+	}
+	for name := range dirs {
+		f.dirs[name] = true
+	}
+	return nil
+}
+
+// RemoveAll は path を 中身ごと消す。無い path は 誤りでない。根は 誤り。
+func (f *FS) RemoveAll(p string) error {
+	f.record("RemoveAll", p)
+	c, err := rule.CleanRel(p)
+	if err != nil {
+		return err
+	}
+	if c == "." {
+		return pathErr("removeall", c, errors.New("根は消せない"))
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for name := range f.files {
+		if rule.Within(name, c) {
+			delete(f.files, name)
+		}
+	}
+	for name := range f.dirs {
+		if rule.Within(name, c) {
+			delete(f.dirs, name)
+		}
+	}
 	return nil
 }

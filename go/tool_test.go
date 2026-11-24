@@ -43,7 +43,7 @@ func newWorld(t *testing.T, worktree string) *mockWorld {
 		proc: outsidemock.NewProc(map[string]func(outside.Cmd) outside.Result{
 			"toolx": outsidemock.Fixed(outside.Result{Stdout: []byte("toolx version 2.9.1\n")}),
 			"other": nil,
-		}),
+		}).WithPaths(map[string]string{"toolx": "/opt/bin/toolx", "other": "/opt/bin/other"}),
 	}
 }
 
@@ -199,12 +199,43 @@ func TestRunTool_TC_OUT_RUNTOOL_OK(t *testing.T) {
 				if _, err := s.FS.ReadDir("."); !errors.Is(err, outside.ErrOutsideRoot) {
 					t.Errorf("根の一覧が引けた: %v", err)
 				}
+				if rc, err := s.FS.Open("data/in.txt"); err != nil {
+					t.Errorf("Open(data/in.txt) = %v", err)
+				} else {
+					rc.Close()
+				}
+				outsideOps := map[string]func() error{
+					"Open":       func() error { _, err := s.FS.Open("other/no.txt"); return err },
+					"AppendFile": func() error { return s.FS.AppendFile("other/no.txt", []byte("x")) },
+					"MkdirAll":   func() error { return s.FS.MkdirAll("other/d") },
+					"Lstat":      func() error { _, err := s.FS.Lstat("other/no.txt"); return err },
+					"RemoveAll":  func() error { return s.FS.RemoveAll("other") },
+					"Rename 先":   func() error { return s.FS.Rename("data/in.txt", "other/in.txt") },
+					"Rename 元":   func() error { return s.FS.Rename("other/no.txt", "data/no.txt") },
+				}
+				for name, op := range outsideOps {
+					if err := op(); !errors.Is(err, outside.ErrOutsideRoot) {
+						t.Errorf("fs_roots の外の %s が通った: %v", name, err)
+					}
+				}
+				if got, err := w.fs.ReadFile("other/no.txt"); err != nil || string(got) != "no" {
+					t.Errorf("fs_roots の外の file が変わった: %q, %v", got, err)
+				}
+				if got, err := w.fs.ReadFile("data/in.txt"); err != nil || string(got) != "in" {
+					t.Errorf("Rename の移し先が根の外の時に 移す元が変わった: %q, %v", got, err)
+				}
 				// Proc: 宣言した program だけ。環境に在っても 宣言に無ければ 誤り。
 				if _, err := s.Proc.Run(ctx, outside.Cmd{Name: "toolx"}); err != nil {
 					t.Errorf("Run(toolx) = %v", err)
 				}
 				if _, err := s.Proc.Run(ctx, outside.Cmd{Name: "other"}); !errors.Is(err, outside.ErrUndeclaredProgram) {
 					t.Errorf("宣言に無い program が起きた: %v", err)
+				}
+				if p, err := s.Proc.LookPath("toolx"); err != nil || p != "/opt/bin/toolx" {
+					t.Errorf("LookPath(toolx) = %q, %v", p, err)
+				}
+				if p, err := s.Proc.LookPath("other"); !errors.Is(err, outside.ErrUndeclaredProgram) {
+					t.Errorf("宣言に無い program の path が引けた: %q, %v", p, err)
 				}
 				// SysInfo・IdGen は base の物がそのまま渡る。Workdir。
 				if h, err := s.SysInfo.Hostname(); err != nil || h != "host-a" {

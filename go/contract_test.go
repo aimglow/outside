@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -525,4 +526,419 @@ func testDir(t *testing.T) string {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir
+}
+
+// TC-OUT-CLOCK-TIMER (real と mock に共通の契約): 期限を過ぎた物だけが送る・Stop した物は送らない・Reset は掛け直す。
+// advance は 時刻を進める (real = 実の Sleep / mock = Advance)。wait は 届くはずの値を待つ上限 (mock は 0 = 待たない)。
+// unit は 期限の単位 (real は 短い実時間)。
+func timerContract(t *testing.T, c outside.Clock, advance func(time.Duration), unit, wait time.Duration) {
+	t.Helper()
+	recv := func(ch <-chan time.Time, what string) time.Time {
+		t.Helper()
+		if wait == 0 {
+			select {
+			case v := <-ch:
+				return v
+			default:
+				t.Fatalf("%s が届かない", what)
+			}
+		}
+		select {
+		case v := <-ch:
+			return v
+		case <-time.After(wait):
+			t.Fatalf("%s が %v 待っても届かない", what, wait)
+		}
+		return time.Time{}
+	}
+	none := func(ch <-chan time.Time, what string) {
+		t.Helper()
+		select {
+		case v := <-ch:
+			t.Errorf("%s が届いた: %v", what, v)
+		default:
+		}
+	}
+	long := 1000 * unit
+	start := c.Now()
+	t1 := c.NewTimer(unit)
+	stopped := c.NewTimer(long)
+	pending := c.NewTimer(long)
+	after := c.After(unit)
+	advance(3 * unit)
+	if v := recv(t1.C(), "期限を過ぎた Timer"); v.Before(start.Add(unit)) {
+		t.Errorf("Timer の時刻 %v が 期限 %v より前", v, start.Add(unit))
+	}
+	if v := recv(after, "期限を過ぎた After"); v.Before(start.Add(unit)) {
+		t.Errorf("After の時刻 %v が 期限 %v より前", v, start.Add(unit))
+	}
+	none(pending.C(), "期限前の Timer")
+	if t1.Stop() {
+		t.Error("発火済みの Timer の Stop が true")
+	}
+	if !stopped.Stop() {
+		t.Error("動いている Timer の Stop が false")
+	}
+	if stopped.Stop() {
+		t.Error("止めた Timer の 2 度目の Stop が true")
+	}
+	// Reset: 済んだ Timer は false、動いている Timer は true。どちらも 新しい期限で発火する。
+	if t1.Reset(unit) {
+		t.Error("発火済みの Timer の Reset が true")
+	}
+	if !pending.Reset(unit) {
+		t.Error("動いている Timer の Reset が false")
+	}
+	before := c.Now()
+	advance(3 * unit)
+	if v := recv(t1.C(), "Reset した 済みの Timer"); v.Before(before.Add(unit)) {
+		t.Errorf("Reset した Timer の時刻 %v が 新しい期限より前", v)
+	}
+	recv(pending.C(), "Reset した 動いている Timer")
+	none(stopped.C(), "Stop した Timer")
+	// 発火して 受けていない Timer を Stop すると 値は捨てられる (Stop の後に 前の期限の値は届かない)。
+	unread := c.NewTimer(unit)
+	advance(3 * unit)
+	unread.Stop()
+	none(unread.C(), "Stop の後の 前の期限の値")
+
+	// Ticker: 間隔ごとに発火し Stop の後は 送らない。
+	tk := c.NewTicker(unit)
+	advance(3 * unit)
+	first := recv(tk.C(), "Ticker の 1 回目")
+	advance(3 * unit)
+	if second := recv(tk.C(), "Ticker の 2 回目"); !second.After(first) {
+		t.Errorf("Ticker の 2 回目 %v が 1 回目 %v の後でない", second, first)
+	}
+	tk.Stop()
+	advance(3 * unit)
+	none(tk.C(), "Stop した Ticker")
+	stopped.Stop()
+	pending.Stop()
+	t1.Stop()
+}
+
+func TestContract_TC_OUT_CLOCK_TIMER(t *testing.T) {
+	t.Run("real", func(t *testing.T) {
+		// 実の時計は 短い期限で 自分で掛けた物だけを見る。
+		c := outside.NewClock()
+		timerContract(t, c, c.Sleep, 20*time.Millisecond, 5*time.Second)
+	})
+	t.Run("mock", func(t *testing.T) {
+		c := outsidemock.NewClock(time.Date(2000, 1, 2, 3, 4, 5, 0, time.UTC))
+		began := time.Now()
+		// mock は 1 時間の単位でも 実時間を待たない。
+		timerContract(t, c, c.Advance, time.Hour, 0)
+		if took := time.Since(began); took > 10*time.Second {
+			t.Errorf("mock の契約に 実時間 %v かかった", took)
+		}
+	})
+	t.Run("NewTicker の 0 以下は panic", func(t *testing.T) {
+		for name, c := range map[string]outside.Clock{
+			"real": outside.NewClock(),
+			"mock": outsidemock.NewClock(time.Date(2000, 1, 2, 3, 4, 5, 0, time.UTC)),
+		} {
+			func() {
+				defer func() {
+					if recover() == nil {
+						t.Errorf("%s: NewTicker(0) が panic しない", name)
+					}
+				}()
+				c.NewTicker(0)
+			}()
+		}
+	})
+}
+
+// TC-OUT-FS-MORE: Open・AppendFile・MkdirAll・Lstat・Rename・RemoveAll の契約。f は 空の根から始まる。abs は 根の外の絶対 path。
+func fsMoreContract(t *testing.T, f outside.FS, abs string) {
+	t.Helper()
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	readAll := func(p string) (string, error) {
+		rc, err := f.Open(p)
+		if err != nil {
+			return "", err
+		}
+		defer rc.Close()
+		b, err := io.ReadAll(rc)
+		return string(b), err
+	}
+	must(f.WriteFile("a/b.txt", []byte("hello")))
+
+	// Open。
+	if got, err := readAll("a/b.txt"); err != nil || got != "hello" {
+		t.Errorf("Open = %q, %v", got, err)
+	}
+	if _, err := f.Open("nope"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("Open(無い) = %v", err)
+	}
+	if _, err := f.Open("a"); err == nil {
+		t.Error("dir の Open が通った")
+	}
+
+	// AppendFile: 無ければ作り (親の dir も) 足した順に並ぶ。
+	must(f.AppendFile("log/x.txt", []byte("1")))
+	must(f.AppendFile("log/x.txt", []byte("2")))
+	if got, err := f.ReadFile("log/x.txt"); err != nil || string(got) != "12" {
+		t.Errorf("AppendFile 2 回の後 = %q, %v", got, err)
+	}
+	if err := f.AppendFile("a", []byte("x")); err == nil {
+		t.Error("dir への AppendFile が通った")
+	}
+
+	// MkdirAll: 入れ子を作り 在れば何もしない。途中が file なら 誤り。
+	must(f.MkdirAll("m/n/o"))
+	must(f.MkdirAll("m/n/o"))
+	must(f.MkdirAll("."))
+	if info, err := f.Stat("m/n/o"); err != nil || !info.IsDir {
+		t.Errorf("MkdirAll の後の Stat = %+v, %v", info, err)
+	}
+	if err := f.MkdirAll("a/b.txt/x"); err == nil {
+		t.Error("file の下への MkdirAll が通った")
+	}
+
+	// Lstat: symlink でない物は Stat と同じ。
+	if info, err := f.Lstat("a/b.txt"); err != nil || info != (outside.FileInfo{Name: "b.txt", Size: 5}) {
+		t.Errorf("Lstat(file) = %+v, %v", info, err)
+	}
+	if info, err := f.Lstat("m"); err != nil || info != (outside.FileInfo{Name: "m", IsDir: true}) {
+		t.Errorf("Lstat(dir) = %+v, %v", info, err)
+	}
+	if _, err := f.Lstat("nope"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("Lstat(無い) = %v", err)
+	}
+
+	// Rename: file を移す・file を置き換える・dir を中身ごと移す。
+	must(f.Rename("a/b.txt", "m/c.txt"))
+	if got, err := f.ReadFile("m/c.txt"); err != nil || string(got) != "hello" {
+		t.Errorf("Rename の移し先 = %q, %v", got, err)
+	}
+	if _, err := f.Stat("a/b.txt"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("Rename の移す元が残った: %v", err)
+	}
+	must(f.WriteFile("m/d.txt", []byte("other")))
+	must(f.Rename("m/d.txt", "m/c.txt"))
+	if got, err := f.ReadFile("m/c.txt"); err != nil || string(got) != "other" {
+		t.Errorf("置き換えた Rename の後 = %q, %v", got, err)
+	}
+	must(f.Rename("m/c.txt", "m/c.txt"))
+	must(f.Rename("m", "m2"))
+	if got, err := f.ReadFile("m2/c.txt"); err != nil || string(got) != "other" {
+		t.Errorf("dir の Rename の後の中身 = %q, %v", got, err)
+	}
+	if info, err := f.Stat("m2/n/o"); err != nil || !info.IsDir {
+		t.Errorf("dir の Rename の後の入れ子 = %+v, %v", info, err)
+	}
+	if _, err := f.Stat("m"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("dir の Rename の移す元が残った: %v", err)
+	}
+	if err := f.Rename("nope", "x"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("Rename(無い) = %v", err)
+	}
+	if err := f.Rename("m2/c.txt", "zz/c.txt"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("移し先の親が無い Rename = %v", err)
+	}
+	if err := f.Rename("m2/c.txt", "log"); err == nil {
+		t.Error("dir の上への Rename が通った")
+	}
+	if err := f.Rename("m2", "m2/n/inner"); err == nil {
+		t.Error("dir を自分の下へ移す Rename が通った")
+	}
+	if err := f.Rename(".", "root2"); err == nil {
+		t.Error("根の Rename が通った")
+	}
+	for _, p := range []string{"..", "../x", abs, ""} {
+		if err := f.Rename("m2/c.txt", p); !errors.Is(err, outside.ErrOutsideRoot) {
+			t.Errorf("根の外へ (%q) の Rename = %v", p, err)
+		}
+		if err := f.Rename(p, "m2/from-outside.txt"); !errors.Is(err, outside.ErrOutsideRoot) {
+			t.Errorf("根の外から (%q) の Rename = %v", p, err)
+		}
+	}
+	if got, err := f.ReadFile("m2/c.txt"); err != nil || string(got) != "other" {
+		t.Errorf("通らなかった Rename の後に 移す元が変わった: %q, %v", got, err)
+	}
+
+	// RemoveAll: 中身ごと消え 無い path は 誤りでなく 根は 誤り。
+	must(f.RemoveAll("m2"))
+	if _, err := f.Stat("m2"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("RemoveAll の後に残った: %v", err)
+	}
+	must(f.RemoveAll("m2"))
+	must(f.RemoveAll("log/x.txt"))
+	if err := f.RemoveAll("."); err == nil {
+		t.Error("根の RemoveAll が通った")
+	}
+	if got, err := f.ReadDir("."); err != nil || !reflect.DeepEqual(got, []outside.DirEntry{{Name: "a", IsDir: true}, {Name: "log", IsDir: true}}) {
+		t.Errorf("根の RemoveAll の後の一覧 = %+v, %v", got, err)
+	}
+
+	// 根の外。
+	for _, p := range []string{"..", "../x", "a/../../x", abs, ""} {
+		if _, err := f.Open(p); !errors.Is(err, outside.ErrOutsideRoot) {
+			t.Errorf("Open(%q) = %v", p, err)
+		}
+		if err := f.AppendFile(p, []byte("x")); !errors.Is(err, outside.ErrOutsideRoot) {
+			t.Errorf("AppendFile(%q) = %v", p, err)
+		}
+		if err := f.MkdirAll(p); !errors.Is(err, outside.ErrOutsideRoot) {
+			t.Errorf("MkdirAll(%q) = %v", p, err)
+		}
+		if _, err := f.Lstat(p); !errors.Is(err, outside.ErrOutsideRoot) {
+			t.Errorf("Lstat(%q) = %v", p, err)
+		}
+		if err := f.RemoveAll(p); !errors.Is(err, outside.ErrOutsideRoot) {
+			t.Errorf("RemoveAll(%q) = %v", p, err)
+		}
+	}
+}
+
+func TestContract_TC_OUT_FS_MORE(t *testing.T) {
+	newAbs := func(t *testing.T) string {
+		abs := filepath.Join(testDir(t), "outside.txt")
+		if err := os.WriteFile(abs, []byte("keep"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return abs
+	}
+	checkAbs := func(t *testing.T, abs string) {
+		if data, err := os.ReadFile(abs); err != nil || string(data) != "keep" {
+			t.Errorf("根の外の file が変わった: %q, %v", data, err)
+		}
+	}
+	t.Run("real", func(t *testing.T) {
+		root := testDir(t)
+		f, err := outside.NewFS(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		abs := newAbs(t)
+		fsMoreContract(t, f, abs)
+		checkAbs(t, abs)
+		if _, err := os.Stat(root); err != nil {
+			t.Errorf("根が消えた: %v", err)
+		}
+	})
+	t.Run("mock", func(t *testing.T) {
+		f, err := outsidemock.NewFS(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		abs := newAbs(t)
+		fsMoreContract(t, f, abs)
+		checkAbs(t, abs)
+	})
+}
+
+// TC-OUT-FS-MORE (real の symlink): Lstat は symlink を辿らず IsSymlink で名乗る。Stat は辿る。
+// 根の外を指す symlink は Lstat で名乗れるが 辿る操作 (Open・Stat) は止まり RemoveAll は 指す先を消さない。
+func TestRealFS_TC_OUT_FS_MORE_Symlink(t *testing.T) {
+	root := testDir(t)
+	secret := filepath.Join(testDir(t), "secret.txt")
+	if err := os.WriteFile(secret, []byte("secret"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "target.txt"), []byte("abc"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("target.txt", filepath.Join(root, "in")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(secret, filepath.Join(root, "out")); err != nil {
+		t.Fatal(err)
+	}
+	f, err := outside.NewFS(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"in", "out"} {
+		if info, err := f.Lstat(name); err != nil || info != (outside.FileInfo{Name: name, IsSymlink: true}) {
+			t.Errorf("Lstat(%s) = %+v, %v", name, info, err)
+		}
+	}
+	if info, err := f.Stat("in"); err != nil || info != (outside.FileInfo{Name: "in", Size: 3}) {
+		t.Errorf("Stat(in) = %+v, %v (辿った先を返す)", info, err)
+	}
+	if rc, err := f.Open("out"); err == nil {
+		rc.Close()
+		t.Error("symlink 越しに 根の外が開けた")
+	}
+	if _, err := f.Stat("out"); err == nil {
+		t.Error("symlink 越しに 根の外の Stat が通った")
+	}
+	if err := f.AppendFile("out", []byte("x")); err == nil {
+		t.Error("symlink 越しに 根の外へ足せた")
+	}
+	if err := f.RemoveAll("out"); err != nil {
+		t.Errorf("根の外を指す symlink の RemoveAll = %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(root, "out")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("RemoveAll の後に symlink が残った: %v", err)
+	}
+	if data, err := os.ReadFile(secret); err != nil || string(data) != "secret" {
+		t.Errorf("根の外の file が変わった: %q, %v", data, err)
+	}
+}
+
+// TC-OUT-PROC-LOOKPATH: 宣言した program の path を返し 宣言に無い名前は ErrUndeclaredProgram。
+// 宣言に在っても 実行 file が無ければ exec.ErrNotFound の仲間。
+func TestProc_TC_OUT_PROC_LOOKPATH(t *testing.T) {
+	t.Run("real", func(t *testing.T) {
+		dir := testDir(t)
+		tool := filepath.Join(dir, "tool")
+		onPath := filepath.Join(dir, "onpath")
+		for _, p := range []string{tool, onPath} {
+			if err := os.WriteFile(p, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// PATH は test が作った dir だけ (機体の PATH を読まない)。
+		t.Setenv("PATH", dir)
+		p := outside.NewProc(map[string]string{
+			"tool":    tool,
+			"onpath":  "",
+			"absent":  "",
+			"missing": filepath.Join(dir, "nope"),
+		})
+		if got, err := p.LookPath("tool"); err != nil || got != tool {
+			t.Errorf("LookPath(tool) = %q, %v (want %q)", got, err, tool)
+		}
+		if got, err := p.LookPath("onpath"); err != nil || got != onPath {
+			t.Errorf("LookPath(onpath) = %q, %v (want %q)", got, err, onPath)
+		}
+		for _, name := range []string{"absent", "missing"} {
+			if got, err := p.LookPath(name); !errors.Is(err, exec.ErrNotFound) {
+				t.Errorf("LookPath(%s) = %q, %v (want exec.ErrNotFound)", name, got, err)
+			}
+		}
+		if got, err := p.LookPath("undeclared"); !errors.Is(err, outside.ErrUndeclaredProgram) {
+			t.Errorf("宣言に無い LookPath = %q, %v", got, err)
+		}
+	})
+	t.Run("mock", func(t *testing.T) {
+		p := outsidemock.NewProc(map[string]func(outside.Cmd) outside.Result{"tool": nil, "absent": nil}).
+			WithPaths(map[string]string{"tool": "/opt/bin/tool"})
+		if got, err := p.LookPath("tool"); err != nil || got != "/opt/bin/tool" {
+			t.Errorf("LookPath(tool) = %q, %v", got, err)
+		}
+		if got, err := p.LookPath("absent"); !errors.Is(err, exec.ErrNotFound) {
+			t.Errorf("path を渡していない LookPath = %q, %v", got, err)
+		}
+		if got, err := p.LookPath("undeclared"); !errors.Is(err, outside.ErrUndeclaredProgram) {
+			t.Errorf("宣言に無い LookPath = %q, %v", got, err)
+		}
+		want := []outsidemock.Call{
+			{Method: "LookPath", Args: []string{"tool"}},
+			{Method: "LookPath", Args: []string{"absent"}},
+			{Method: "LookPath", Args: []string{"undeclared"}},
+		}
+		if got := p.Calls(); !reflect.DeepEqual(got, want) {
+			t.Errorf("記録 = %+v", got)
+		}
+	})
 }

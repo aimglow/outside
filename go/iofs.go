@@ -3,7 +3,6 @@ package outside
 // iofs.go — FS を io/fs の FS として読ませる (値の関数が io/fs.FS を受け、入口が 宣言した根の FS を渡す)。kifune #244 が作った口を 部品へ移した。
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"io/fs"
@@ -31,11 +30,11 @@ func (f ioFS) Open(name string) (fs.File, error) {
 		}
 		return &dir{info: fileInfo{name: path.Base(name), info: info}, ents: ents}, nil
 	}
-	b, err := f.o.ReadFile(name)
+	rc, err := f.o.Open(name)
 	if err != nil {
 		return nil, err
 	}
-	return &file{info: fileInfo{name: path.Base(name), info: info}, r: bytes.NewReader(b)}, nil
+	return &file{info: fileInfo{name: path.Base(name), info: info}, r: rc}, nil
 }
 
 func (f ioFS) ReadFile(name string) ([]byte, error) {
@@ -106,14 +105,15 @@ func (d dirEntry) Type() fs.FileMode {
 }
 func (d dirEntry) Info() (fs.FileInfo, error) { return d.f.Stat(path.Join(d.dir, d.e.Name)) }
 
+// file は FS.Open の stream を そのまま読ませる。
 type file struct {
 	info fileInfo
-	r    *bytes.Reader
+	r    io.ReadCloser
 }
 
 func (f *file) Stat() (fs.FileInfo, error) { return f.info, nil }
 func (f *file) Read(p []byte) (int, error) { return f.r.Read(p) }
-func (f *file) Close() error               { return nil }
+func (f *file) Close() error               { return f.r.Close() }
 
 type dir struct {
 	info fileInfo

@@ -5,6 +5,7 @@ package outside
 import (
 	"context"
 	"errors"
+	"io"
 	"time"
 
 	"github.com/aimglow/outside/go/internal/rule"
@@ -21,11 +22,34 @@ var (
 	ErrUndetermined = errors.New("outside: 判定不能")
 )
 
-// Clock は 今の時刻を返し 待つ。
+// Clock は 今の時刻を返し 待つ。timer・ticker を掛ける。経過 (Since・Until) は Now() から引く。
 type Clock interface {
 	Now() time.Time
 	// Sleep は d だけ待つ。0 以下は 待たない。
 	Sleep(d time.Duration)
+	// NewTimer は d 後に 1 回 C() へ時刻を送る Timer を返す。0 以下は すぐ送る。
+	NewTimer(d time.Duration) Timer
+	// NewTicker は d ごとに C() へ時刻を送る Ticker を返す。0 以下は panic (time.NewTicker と同じ)。
+	NewTicker(d time.Duration) Ticker
+	// After は d 後に 1 回 時刻が届く channel を返す (NewTimer(d).C() と同じ)。
+	After(d time.Duration) <-chan time.Time
+}
+
+// Timer は 1 回だけ発火する timer。channel は 1 つ分の buffer を持ち 受け手が読まなければ 次の発火を落とす。
+// Stop・Reset の後に 前の期限の値は届かない (time.Timer と同じ)。
+type Timer interface {
+	C() <-chan time.Time
+	// Stop は 発火を止める。止めた時 true、済んでいたか 止まっていた時 false。
+	Stop() bool
+	// Reset は 期限を 今から d 後に掛け直す。掛け直す前に 動いていた時 true。
+	Reset(d time.Duration) bool
+}
+
+// Ticker は 一定の間隔で発火する。受け手が遅れた分の発火は落ちる (time.Ticker と同じ)。
+type Ticker interface {
+	C() <-chan time.Time
+	// Stop は 発火を止める。channel は閉じない。
+	Stop()
 }
 
 // Env は 環境変数を名前で読む。無い名前は ok=false。
@@ -39,11 +63,13 @@ type DirEntry struct {
 	IsDir bool
 }
 
-// FileInfo は Stat の結果。dir の Size は 0。
+// FileInfo は Stat・Lstat の結果。dir と symlink の Size は 0。
 type FileInfo struct {
 	Name  string
 	Size  int64
 	IsDir bool
+	// IsSymlink は Lstat が symlink を辿らずに見た時だけ true (Stat は 辿った先を返す)。
+	IsSymlink bool
 }
 
 // FS は 宣言した根の下の file を読む・書く・一覧する。
@@ -58,6 +84,19 @@ type FS interface {
 	Stat(path string) (FileInfo, error)
 	// Remove は file か 空の dir を消す。
 	Remove(path string) error
+	// Open は file を 読むだけで開く (stream で読む)。dir は 誤り。読み終えたら Close する。
+	Open(path string) (io.ReadCloser, error)
+	// AppendFile は file の末尾に data を足す。file が無ければ作り 親の dir が無ければ作る。
+	AppendFile(path string, data []byte) error
+	// MkdirAll は path と その親の dir を 無ければ作る。在れば 何もしない。途中が file なら 誤り。
+	MkdirAll(path string) error
+	// Lstat は symlink を辿らずに見る。symlink は FileInfo.IsSymlink で名乗る。
+	Lstat(path string) (FileInfo, error)
+	// Rename は from を to へ移す (両方とも 根の中)。to の親の dir は 在る事。
+	// to に file が在れば 置き換える。to が dir なら 誤り。根は 移せない。
+	Rename(from, to string) error
+	// RemoveAll は path を 中身ごと消す。無い path は 誤りでない。根は 消せない (誤り)。
+	RemoveAll(path string) error
 }
 
 // SysInfo は 動いている機体と process の値を返す。
@@ -101,6 +140,9 @@ type Result struct {
 // Proc は 宣言した名前の program を起こし 結果を返す。宣言に無い名前は ErrUndeclaredProgram。
 type Proc interface {
 	Run(ctx context.Context, cmd Cmd) (Result, error)
+	// LookPath は 宣言した program の 実行 file の path を返す。宣言に無い名前は ErrUndeclaredProgram、
+	// 宣言に在っても 実行 file が見つからなければ errors.Is(err, exec.ErrNotFound) の誤り。
+	LookPath(name string) (string, error)
 }
 
 // Workdir は 宣言した置き場の下に 作業場を作り 終わりに消す。
