@@ -160,7 +160,7 @@ lint:
     purpose: adapters 層 (libs/platform) の直下を 外の依存先ごとの lib の並びに保ち ごみ置き場にしない。
     rules:
       - 直下の dir 名は <機能>-<依存先>-<runtime>。runtime の語と 全 project 共通の機能の語は lint-platform/naming/rules.go の表 (規則の正本)。
-        project 固有の機能の語は その project が 宣言の file (--vocab に渡す TOML、[platform] capabilities = [...]) に書く。
+        project 固有の機能の語は その project の repo の根の outside-platform.toml の capabilities = [...] に書く (名前と場所は固定。outside.toml はツールの環境の宣言の名前なので使わない。道具は --vocab で この file を受け取り 無ければ 共通の語だけで検査する)。
         中身を表さない語 (common・util・shared・helper・misc・lib・core・base・other) は 共通の表にも 宣言にも 置けない (道具が拒む)。
       - 直下に dir 以外の物を置かない。
       - 各 lib は runtime ごとの 3 file (interface / real / mock) を 直下か src/ か lib/ に持つ。
@@ -193,7 +193,7 @@ lint:
       - 規則を厳しくした版 → MAJOR で出す。project は 直す準備ができてから lint-platform の版だけを上げる
   go:
     tool: golangci-lint 2.x (forbidigo)
-    config: lint/go/golangci.yml (利用する project が取り込む)
+    config: lint-go/golangci.yml (利用する project が取り込む)
     forbid: [time.Now, time.Since, time.Until, time.Sleep, time.After, time.Tick, time.NewTimer, time.NewTicker,
              os.Getenv, os.LookupEnv, os.Environ, os.Setenv, os.Unsetenv, os.Hostname,
              exec.Command, exec.CommandContext, exec.LookPath,
@@ -203,12 +203,12 @@ lint:
     except: この部品の real (利用する project では outside は依存の module なので lint の対象に入らない)
   typescript:
     tool: ESLint (no-restricted-syntax・no-restricted-globals・no-restricted-properties・no-restricted-imports)
-    config: lint/ts/eslint.config.js (flat config の配列。project の eslint.config.js が取り込んで足す)
+    config: lint-ts/eslint.config.js (flat config の配列。project の eslint.config.js が取り込んで足す)
     forbid: [Date.now, "new Date() (引数なし)", setTimeout, setInterval, process.env, fetch,
              localStorage, sessionStorage, "import fs", "import child_process"]
     except: この部品の real の module
   dart:
-    tool: lint/dart の outside_lint (package:analyzer の構文木を読む。`dart run outside_lint:check <dir>`。exit 0 = 違反なし / 1 = 違反 / 3 = 読めない file = 判定不能)
+    tool: lint-dart の outside_lint (package:analyzer の構文木を読む。`dart run outside_lint:check <dir>`。exit 0 = 違反なし / 1 = 違反 / 3 = 読めない file = 判定不能)
     forbid: [DateTime.now, Platform.environment, Process.run・runSync・start, "File(...)", "Directory(...)", Directory.systemTemp, Directory.current, "HttpClient(...)", "Timer(...)"]
     except: この部品の real の library と lint 自身 (対象の dir に渡さない)
     limit: 型を解決しない構文木で読む = 別名の import (import 'dart:io' as io の io.File 等) は名指せない。見つけたら この一覧に足す。
@@ -247,7 +247,7 @@ versioning:
     fetch_from: https://github.com/aimglow/outside.git
     fetch_identity: git から取得するのは ccark-gitops の名義 (seat の検査も image の build (gitops) も 同じ)。
     go: project の go.mod は replace で libs/outside/go を指す (module path は github.com/aimglow/outside/go のまま)。
-    lint_platform: 各 project の push の前の検査の 1 段 = go -C libs/outside/lint-platform run . --root ../../platform。読む物 = libs/platform/** と libs/outside/lint-platform/**。
+    lint_platform: 各 project の push の前の検査の 1 段 = go -C libs/outside/lint-platform run . check --root ../../platform --vocab ../../../outside-platform.toml。読む物 = libs/platform/**・libs/outside/lint-platform/**・outside-platform.toml。
     registry: 有料の registry にも 公開の registry にも 登録しない。
 
 delivery:

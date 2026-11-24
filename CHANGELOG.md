@@ -62,3 +62,21 @@
 exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 
 利用する project がやる事: `.ccark-prepush.toml` に 1 段として宣言する。run = `go run github.com/aimglow/outside/lint/naming@v0.6.0 --root libs/platform`、reads = `libs/platform/**`。各 project で この検査を書かない。
+
+## 部品ごとの版へ (2026-11-24)
+
+版は 部品ごとの tag `<部品>/vX.Y.Z` で出す (部品の表 = `docs/developer/design.outside.yaml` の components)。
+各 project は `scripts/sync-outside.sh <部品> <tag>` で 部品ごとに版を選び 自分の repo の中へ置く (検査のたびに網から取らない)。
+版は `scripts/release.sh <部品> <major|minor|patch>` で切る。
+
+- `lint/go`・`lint/ts`・`lint/dart` → `lint-go/`・`lint-ts/`・`lint-dart/` (中身は同じ)。最初の版 = 各 `v0.1.0`。
+- `lint/naming` → `lint-platform/` (`lint-platform/v0.1.0`)。v0.6.0 の `lint/naming` から変えた所:
+  - 検査は `check`、雛形の作成は `scaffold` (名前が通らなければ何も作らない)。
+  - 決めるのは 3 つだけ (直下の dir 名 / 直下に dir 以外を置かない / runtime の 3 file)。lib の中の sub dir は見ない (v0.6.0 の「置いてよい dir」の規則は外した)。
+  - project 固有の機能の語は repo の根の `outside-platform.toml` の `capabilities` に宣言する。中身を表さない語 (common・util・shared 等) は宣言できない。
+  - 同じ runtime で同じ依存先が 2 つの機能に在れば 警告 (止めない)。
+  - 外の module (BurntSushi/toml) は vendor で同梱。
+  - 各 project の段 = `go -C libs/outside/lint-platform run . check --root ../../platform --vocab ../../../outside-platform.toml`。
+- `docs` (`docs/deterministic-testing/`) = `docs/v0.1.0`。各 project の lint の除外を `libs/outside/` の全部品へ広げた (enforcement §3・§4)。
+- `ts/`・`dart/` を `next/`・`angular/`・`flutter/` に分けるのは まだ (分けた時に 各部品の最初の版を出す)。`go/` は `go/v0.6.0` のまま。
+

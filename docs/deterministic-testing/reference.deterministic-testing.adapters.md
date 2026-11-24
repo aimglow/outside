@@ -14,17 +14,14 @@
 
 | 部分 | 許す値 |
 | :--- | :--- |
-| `<機能>` | 語の表の正本 = `outside` の `lint/naming/rules.go`（今の語: `authn`（認証）・`db`（DB）・`vcs`（版管理）・`container`（container）・`migrate`（migration）・`schema`（API の型定義）・`config`（設定）・`log`（log）・`http`（通信）・`kv`（保存）・`ipc`（process 間通信）・`remote`（遠隔の実行））。語を足すときは `rules.go` を直して 版を上げる。 |
-| `<依存先>` | 外部の製品・プロトコルの名前（小文字・`-` 区切り。例: `postgres`・`google-iap`・`cloudflare-access`・`git`・`podman`・`atlas`・`buf`・`ssh`）。 |
-| `<runtime>` | `go`・`next`・`angular`・`flutter` のどれか（`outside` と同じ 4 つ）。 |
+| `<機能>` | 全 project 共通の語の正本 = `outside` の `lint-platform/naming/rules.go`。project 固有の語は repo の根の `outside-platform.toml` の `capabilities` に宣言する（その project の review で決める）。 |
+| `<依存先>` | 外部の製品・プロトコルの名前（小文字・`-` 区切り。例: `postgres`・`google-iap`・`cloudflare-access`・`git`・`podman`・`atlas`・`buf`・`ssh`・`shared-preferences`）。 |
+| `<runtime>` | `go`・`next`・`angular`・`flutter` のどれか（`outside` の部品と同じ 4 つ）。 |
 
-- 1 lib = 1 依存先。`common`・`util`・`shared`・`helper` 等の 依存先の分からない名前を作らない。
+- 1 lib = 1 依存先（機械で判定できない = lib を足す変更の 設計の review で見る）。機能に `common`・`util`・`shared`・`helper` 等の 中身を表さない語を使わない（検査が拒む）。
 - 依存先の実物を起こす test の部品（例: 決めた版の DB を起こす部品）は その依存先の lib の 結合テストの中に置き、独立の lib にしない。
-- 検査 = `outside` の `lint/naming`（06 §4.1）。正規表現の正本も `rules.go`（今の形）:
-
-```text
-^(authn|db|vcs|container|migrate|schema|config|log|http|kv|ipc|remote)-[a-z0-9]+(-[a-z0-9]+)*-(go|next|angular|flutter)$
-```
+- lib は `lint-platform` の `scaffold` で作る。検査 = 同じ道具の `check`（enforcement §4.1）。
+- 表せない物が出た時: 機能の語が無い → `outside-platform.toml` に足す / 3 file に分けられない依存先 → project の中で例外を作らず outside 門番へ依頼する。
 
 ## 1. 最重要ルール：3 ファイル分離による権限隔離
 

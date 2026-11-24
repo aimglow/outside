@@ -51,7 +51,7 @@ AI エージェントに規約を守らせる最大の鍵は、プロンプト�
 
 ## 2. TypeScript（Next.js / Angular）禁止構文・実機パス禁止 ESLint
 
-`libs/outside/**` および `**/adapters/**/real.ts` **以外**のすべてのファイル（ビジネスロジック、`mock.ts`、Unit テスト）に適用します。
+`libs/outside/**` および `libs/platform/*/src/real.ts` **以外**のすべてのファイル（ビジネスロジック、`mock.ts`、Unit テスト）に適用します。
 
 ```javascript
 // eslint.config.js（非決定要素・生IO・実機絶対パス禁止ルール）
@@ -59,7 +59,7 @@ AI エージェントに規約を守らせる最大の鍵は、プロンプト�
   files: ['**/*.ts', '**/*.tsx'],
   ignores: [
     'libs/outside/**',
-    '**/adapters/**/real.ts',
+    'libs/platform/*/src/real.ts',
     '**/main.ts',
   ],
   rules: {
@@ -143,8 +143,8 @@ linters-settings:
 
 issues:
   exclude-rules:
-    # outside 基盤と、adapters 層の本番実装 (libs/platform/*/adapter_real.go) と 入口の main.go (apps/*・tools/*) のみ許可
-    - path: ^(libs/outside/go/|libs/platform/[^/]+/adapter_real\.go$|apps/[^/]+/main\.go$|tools/[^/]+/main\.go$)
+    # outside から取り込んだ写し (libs/outside/ の全部品) と、adapters 層の本番実装 (libs/platform/*/adapter_real.go) と 入口の main.go (apps/*・tools/*) のみ許可
+    - path: ^(libs/outside/|libs/platform/[^/]+/adapter_real\.go$|apps/[^/]+/main\.go$|tools/[^/]+/main\.go$)
       linters:
         - forbidigo
 ```
@@ -153,25 +153,28 @@ issues:
 
 ## 4. Dart / Flutter 禁止構文の検査（`outside_lint`）
 
-Dart は標準アナライザだけではメソッド単位の禁止ができないため、`outside` の `lint/dart`（`outside_lint`、`package:analyzer` の構文木を読む）を Nx の `lint` ターゲットで回す。grep の正規表現より誤検出が無く、`DateTime.now`・`Platform.environment`・`Process.run` 等・`File(...)`・`Directory(...)`・`Directory.systemTemp`・`HttpClient(...)`・`Timer(...)` を行番号つきで名指す。
+Dart は標準アナライザだけではメソッド単位の禁止ができないため、`outside` の `lint-dart`（`outside_lint`、`package:analyzer` の構文木を読む）を Nx の `lint` ターゲットで回す。grep の正規表現より誤検出が無く、`DateTime.now`・`Platform.environment`・`Process.run` 等・`File(...)`・`Directory(...)`・`Directory.systemTemp`・`HttpClient(...)`・`Timer(...)` を行番号つきで名指す。
 
 ```bash
-# libs/outside/flutter と *_real.dart と main.dart を除く全 Dart を検査する
+# libs/outside と *_real.dart と main.dart を除く全 Dart を検査する
 dart run outside_lint:check apps libs/platform
 # exit 0 = 違反なし / 1 = 違反あり / 3 = 読めない file（判定不能）
 ```
 
 `*_real.dart` と `main.dart` は 検査の対象 dir から外すか 個別に除く。実機パスのハードコード（`/Users/` 等）は 同じ検査に足す。
 
-## 4.1 adapters 層の命名と 3 file の検査（`outside` の `lint/naming`）
+## 4.1 adapters 層の命名と 3 file の検査（`outside` の `lint-platform`）
 
-- 置き場 = `outside` repo の `lint/naming/`（Go、module `github.com/aimglow/outside/lint/naming`）。
-  - `rules.go` = 規則の正本（機能の語の表・runtime の 4 つ・名前の正規表現・runtime ごとの 3 file の名前）。docs は ここを指すだけで 語の表を写さない。
-  - `check.go` = 判定（dir 名と各 dir の file 名の一覧を値で受け 違反の一覧を値で返す。disk を読まない）。test は この判定を 値の表で確かめる（`outside` の中だけで回す）。
-  - `main.go` = 入口（`--root` の dir を読んで判定へ渡す）。
-- 検査すること（`--root` の直下の dir ごと）: 名前が `<機能>-<依存先>-<runtime>` か・3 file（Go = `interface.go`・`adapter_real.go`・`adapter_mock.go` / TS = `interface.ts`・`real.ts`・`mock.ts` / Dart = `interface.dart`・`adapter_real.dart`・`adapter_mock.dart`）が在るか。
-- 出力 = 違反 1 件ずつ `libs/platform/<名前>: <何が違うか>`。exit = 0 違反なし / 1 違反あり / 3 読めない（判定不能）。
-- 各 project = `.ccark-prepush.toml` に 1 段として宣言する: run = `go run github.com/aimglow/outside/lint/naming@<tag> --root libs/platform`、reads = `libs/platform/**` と tag。違反は push の前と便で赤 = land できない。`libs/platform` と tag が変わらなければ 段は前の PASS に当たり 回らない。各 project で この検査を書かない。
+- 置き場 = `outside` repo の部品 `lint-platform`。各 project では `libs/outside/lint-platform/`（`sync-outside.sh lint-platform <tag>` で置く。外の module は vendor で同梱 = 網を使わずに回る）。
+  - `naming/rules.go` = 規則の正本（runtime の 4 つ・全 project 共通の機能の語・中身を表さない語・runtime ごとの 3 file の名前）。docs は ここを指すだけで 語の表を写さない。
+  - `naming/check.go` = 判定（値を受け 違反と警告を値で返す。disk を読まない）。`naming/scaffold.go` = 雛形（名前と 3 file の中身を値で返す）。
+  - `main.go` = 入口（`check` と `scaffold`）。
+- 決めるのは 3 つだけ: ①直下の dir 名が `<機能>-<依存先>-<runtime>` ②直下に dir 以外を置かない ③各 lib に runtime の 3 file（直下か `src/` か `lib/`）。lib の中の sub dir・3 file 以外の file・設定の file は見ない（言語とツールの慣習に任せる）。
+- project 固有の機能の語 = repo の根の `outside-platform.toml` に `capabilities = ["pay", ...]`。中身を表さない語（`common`・`util`・`shared`・`helper`・`misc` 等）は宣言できない（判定不能 = exit 3）。
+- 同じ runtime で 同じ依存先が 2 つの機能に在れば 警告（止めない）。
+- 出力 = `違反 libs/platform/<名前>: <何が違うか>` / `警告 …`。exit = 0 違反なし / 1 違反あり / 3 読めない（判定不能）。
+- lib を作る = `go -C libs/outside/lint-platform run . scaffold --root ../../platform --vocab ../../../outside-platform.toml <機能> <依存先> <runtime>`（名前が通らなければ何も作らない）。
+- 各 project = push の前の検査に 1 段として宣言する: run = `go -C libs/outside/lint-platform run . check --root ../../platform --vocab ../../../outside-platform.toml`、reads = `libs/platform/**`・`libs/outside/lint-platform/**`・`outside-platform.toml`。違反は push の前と便で赤 = land できない。読む物が変わらなければ 段は前の PASS に当たり 回らない。各 project で この検査を書かない。
 
 ## 5. Nx キャッシュ設定の最適化（`nx.json`）
 

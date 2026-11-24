@@ -13,11 +13,10 @@ outside は 全 project が module として取り込む共通部品である。
   `git push origin HEAD:main` (早送りだけ。早送りできない時は main を取り込んで やり直す) →
   main の作業木で `git pull --ff-only`。作業用の branch は GitHub へ push しない。
 - push の前に 手元で 全部の test と lint を回す。通らない物を push しない。
-- 版は git の tag で切る (`vMAJOR.MINOR.PATCH`、Go の module は `go/vMAJOR.MINOR.PATCH`)。
-  壊れた版を tag にしない。tag は動かさない (直しは 次の版)。
-- main は 常に 最新の版にしておく: main の code (go/・ts/・dart/・lint/) は 最新の版の tag と同じ。tag の後に main へ入ってよいのは 文書だけ。
-  code (go/・ts/・dart/・lint/) を変える変更は 版を上げて tag を切るまでを 1 つの作業として済ませ、
-  tag の無い code の変更を main に残さない。文書だけの変更は 版を上げない。
+- 版は 部品ごとの git の tag で切る (`<部品>/vMAJOR.MINOR.PATCH`、部品の表 = 設計書の components)。
+  `./scripts/release.sh <部品> <major|minor|patch>` が その部品の test を回し 次の tag を打つ。壊れた版を tag にしない。tag は動かさない (直しは 次の版)。
+- main は 常に 各部品の最新の版にしておく: 部品の dir を変える変更は その部品の版を上げて tag を切るまでを 1 つの作業として済ませ、
+  tag の無い部品の変更を main に残さない。設計書など 部品でない文書の変更は 版を上げない。
 - commit の message は 何を・なぜ を 1 行目に書く。
 
 ## 編集する者
@@ -32,11 +31,11 @@ outside は 全 project が module として取り込む共通部品である。
 正本 = `docs/deterministic-testing/` (`reference.deterministic-testing.md` と その part)。
 
 1. project の seat が 門番へ依頼する。
-2. 門番が 門番規約に照らして審査し、Real・Mock・両面の test を実装し、`./scripts/release.sh <major|minor|patch>` で test を回して tag を切る。
+2. 門番が 門番規約に照らして審査し、Real・Mock・両面の test を実装し、`./scripts/release.sh <部品> <major|minor|patch>` で test を回して tag を切る。
 3. 門番が `RELEASE_SUCCESS: <tag>` を 依頼元へ `ccark send` で返す。
-4. 依頼元が `./scripts/sync-outside.sh <go|next|angular|flutter|all> <tag>` で この repo の tag を `git archive` し
-   `libs/outside/<target>` へ展開する (展開先は丸ごと置き換え、`.outside-version` に tag を記録する)。
-5. 依頼元は 展開した `libs/outside/<target>` を編集しない。この部品の test は 展開先では回さない (Nx の project として test の target を持たせない)。
+4. 依頼元が `./scripts/sync-outside.sh <部品> <tag>` で その tag を 一時の bare repo に取り `git archive` で 部品の dir を取り出し
+   置き場 (設計書の components の place) を丸ごと置き換える (`.outside-version` に tag を記録する)。部品ごとに 版を選べる。
+5. 依頼元は 置いた写しを編集しない。この部品の test は 置き場では回さない (Nx の project として test の target を持たせない)。
 
 - 版は tag で固定して使う。main を追わない。全 project が 同じ版を使う。
 - 外部依存の test は この repo (Real の自己検証) と 各 project の adapters 層 (`libs/platform/<機能>-<依存先>-<言語>`) の中だけ。

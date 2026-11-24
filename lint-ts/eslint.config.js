@@ -1,6 +1,6 @@
 // outside の TypeScript の lint の設定 (設計書 DSG-outside-001 の lint.typescript)。
 // 外を直に呼ぶ code を落とす。部品の real の module だけが例外 (取り込む project は real を持たない)。
-// 取り込み方: project の eslint.config.js で `import outside from "<写しの path>/lint/ts/eslint.config.js"` して 配列に足す。
+// 取り込み方: project の eslint.config.js で `import outside from "<写しの path>/lint-ts/eslint.config.js"` して 配列に足す。
 
 const port = (name) => `外を直に呼んでいる。outside の ${name} の口を通す (test では mock を渡す)`;
 
