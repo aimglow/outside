@@ -129,3 +129,18 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 - flutter (Dart の package 名は `outside` のまま、mock = `package:outside/mock.dart`): iOS と Android。dependencies は空 (`package:http` を外し Http の real は `dart:io` の HttpClient。口の形 HttpRequest・HttpResponse は同じ)。Config の real は 渡した値 (build 時) → 環境変数の順。
 - 確かめ (TC-OUT-RUNTIME-DEPS): 各部品の依存の宣言と import が runtime の標準の外を持たない事を test が source から読んで確かめる。
 - 利用する側がやる事: `./scripts/sync-outside.sh next next/v0.1.0` (Next.js)・`angular angular/v0.1.0` (Angular)・`flutter flutter/v0.1.0` (Flutter) で取り込む。`ts/` の `@aimglow/outside` を参照していた所は `@aimglow/outside-next` か `@aimglow/outside-angular` へ。Angular の DI の token は adapters 層に置く。Dart の `package:http` を前提にした所は無い (口の形は同じ)。
+
+## go/v0.8.0・lint-go/v0.2.0・docs/v0.7.0 (2026-11-24)
+
+- go (0.x ゆえ 意味を変える変更も MINOR):
+  - 消した: 口 Git (`NewGit`・`Set.Git`・`Base.Git`、mock の `outsidemock.NewGit`・`GitValues`・`Pair`)。特定ツールの名前の口は outside に置かない (REQ-OUT-NO-TOOL-NAME)。
+  - 足した: 口 SysInfo (`Hostname() (string, error)`・`HomeDir() (string, error)`・`Pid() int`・`IsTTY() bool`。real = `outside.NewSysInfo()`、mock = `outsidemock.NewSysInfo(outsidemock.SysInfoValues{...})` = 渡していない Hostname・HomeDir は誤り・Pid 0・IsTTY false)。
+  - 足した: 口 IdGen (`NewID() string`。real = `outside.NewIdGen()` = crypto/rand の UUID v4、mock = `outsidemock.NewIdGen()` = id-0001 から呼んだ順・並行に呼んでも安全)。`Set` と `Base` に `SysInfo`・`IdGen`。
+  - 変えた: RunTool の `requires_git_worktree` は git の program を起こさず 宣言の dir から上へ `.git` (dir でも file でも) を探す (PATH に git が無くても同じ結果)。`RunToolWith` は `Base.Worktree func() (string, error)` で確かめる (nil か誤りなら『git の木』が足りないと名乗り exit 3)。
+  - そのまま: Proc の `Cmd.Stdin`。依存は 標準と BurntSushi/toml だけ。
+- lint-go: 禁止を足した。`os.Hostname`・`os.Getpid`・`os.Getppid`・`os.Getwd`・`os.UserHomeDir`・`os.UserConfigDir`・`os.UserCacheDir` (→ SysInfo)、`math/rand`・`math/rand/v2`・`crypto/rand` の全て (→ IdGen。`pkg` で import path に照らす = 名前だけ rand の自作 package は落とさない)。除外 (exclude-rules) は lint-go に入れない。
+- docs: enforcement.md §3 を lint-go の golangci.yml を正本として指す形にし 除外だけを project 側に置く例 (golangci 2.x) にした。architecture.md・門番規約・outside-spec.md の口と依存の範囲を 実物 (next・angular・flutter の分割、REQ-OUT-RUNTIME-DEPS) に合わせた。
+- 利用する側がやる事:
+  - go: Git を使っていた所は 各 project の adapters 層 `libs/platform/vcs-git-go` (interface / real / mock) へ移し git は `Proc` で起こす (outside.toml の programs に git を宣言する)。`outsidemock.NewGit` を使う test は その adapters の mock に替える。`Set`・`Base` を自前で組む所は `SysInfo`・`IdGen` を足す。`Base` で `requires_git_worktree` を使う所は `Base.Worktree` を渡す。
+  - lint-go: 上げると 今まで通っていた code が落ちうる。先に go を v0.8.0 へ上げ、os.Hostname 等は SysInfo、乱数は IdGen を通す。入口の main.go・adapter_real.go は project 側の除外 (enforcement.md §3) に在る事を確かめる。
+  - docs: docs/v0.7.0 を取り込む。
