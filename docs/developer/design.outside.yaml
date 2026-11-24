@@ -139,6 +139,7 @@ ports:
         Cmd.KillGroup が true なら 子を 新しい process group で起こし ctx が終わった時 group 全体 (孫まで) へ SIGTERM、Cmd.KillGrace (0 なら 5s) の後に まだ居れば SIGKILL を送る。
         false なら 今までどおり 子だけを止める。ctx の終わりで止めた時は Result.Killed = true で 誤りは ctx の誤りを包む (子が自分で終えた時は Killed = false)。
         process group を持たない OS (unix でない) で KillGroup は 誤り (黙って子だけを止めない)。
+        子が自分で終えたのに 孫が 標準出力・標準誤りの pipe を握ったまま残る時は KillGrace の後に exec.ErrWaitDelay を包む誤りを返す (Killed = false。止めたのではなく 待ちを切った)。
         tool-environment に無い program は 誤り。LookPath(name) は 宣言した program の 実行 file の path を返す (宣言に無い名前は 誤り)。Cmd の Stdin は 子 process の標準入力に渡す (秘密を disk にも argv にも載せずに渡す)。
       mock: 起こされた Cmd (引数・Stdin・Env・Dir・KillGroup・KillGrace) を記録し 決めた結果を返す。ctx を受ける関数を宣言でき ctx が終わった時は Killed = true と ctx の誤りを返す (実の process・実時間を使わない)。LookPath は 渡した path を返す (渡していない名前は 見つからない誤り)。
     - name: Workdir
@@ -259,7 +260,7 @@ lint:
              exec.Command, exec.CommandContext, exec.LookPath,
              os.TempDir, os.MkdirTemp, os.CreateTemp,
              os.ReadFile, os.WriteFile, os.Open, os.OpenFile, os.Create, os.ReadDir, os.Stat, os.Lstat,
-             os.Remove, os.RemoveAll, os.Mkdir, os.MkdirAll, os.Rename]
+             os.Remove, os.RemoveAll, os.Mkdir, os.MkdirAll, os.Rename, os.Symlink, os.Readlink, os.Link]
     except: この部品の real。除外の宣言 (exclude-rules) は 取り込む project の側の設定 (enforcement.md §3) が持ち この設定には入れない。
   typescript:
     tool: ESLint (no-restricted-syntax・no-restricted-globals・no-restricted-properties・no-restricted-imports)

@@ -31,5 +31,5 @@ linters:
           msg: 子 process は outside の Proc を通す
         - pattern: ^os\.(TempDir|MkdirTemp|CreateTemp)$
           msg: 作業場は outside の Workdir を通す (system の /tmp を前提にしない)
-        - pattern: ^os\.(ReadFile|WriteFile|Open|OpenFile|Create|ReadDir|Stat|Lstat|Remove|RemoveAll|Mkdir|MkdirAll|Rename)$
+        - pattern: ^os\.(ReadFile|WriteFile|Open|OpenFile|Create|ReadDir|Stat|Lstat|Remove|RemoveAll|Mkdir|MkdirAll|Rename|Symlink|Readlink|Link)$
           msg: file は outside の FS を通す

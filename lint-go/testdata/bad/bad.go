@@ -29,4 +29,7 @@ func Bad() {
 	_ = crand.Text()
 	_, _ = crand.Prime(nil, 8)
 	_ = crand.Reader
+	_ = os.Symlink("a", "b")
+	_, _ = os.Readlink("a")
+	_ = os.Link("a", "b")
 }

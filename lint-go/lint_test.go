@@ -56,6 +56,9 @@ func TestLintGo_TC_OUT_LINT_GO_落とす(t *testing.T) {
 		29: "crand.Text",
 		30: "crand.Prime",
 		31: "crand.Reader",
+		32: "os.Symlink",
+		33: "os.Readlink",
+		34: "os.Link",
 	}
 	got := map[int]string{}
 	for _, m := range issueRe.FindAllStringSubmatch(out, -1) {

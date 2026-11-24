@@ -177,3 +177,9 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
   - mock: TS = `createMockRandom(seed)`、Dart = `MockRandom(seed)`・`MockRandom.text(seed)`。種と呼び順で決まる列 (分けて読んでも続けて読んでも同じ。3 部品で同じ種から同じ列)。`calls` = 読んだ長さの順。`withErr(err)` で以後の read が投げる (undefined・null で戻る)。
   - set: `OutsideSet` に `random`。TS の `createMockSet` の options に `seed` (既定 `DEFAULT_MOCK_RANDOM_SEED`)。
 - 利用する側がやる事: `createRealSet`・`createMockSet`・`OutsideSet.real` を使う所は 何もしなくてよい。set を自分で組む所は `random` を足す (Dart の `OutsideSet(...)` は `random:` が必須)。乱数の byte を作る code は crypto を直に呼ばず `set.random.read(buf)`。Dart で `dart:math` と `package:outside/outside.dart` を両方 取り込む file は `Random` の名が衝突する = `import 'dart:math' as math;` か `hide Random`。
+## go/v0.11.0・lint-go/v0.4.0 (2026-11-25)
+
+- go: FS に `Symlink(target, link)`・`Readlink(link)`。在る symlink は 同じ dir に一時の名前で作ってから付け替える (途中で link が無い時を作らない)。link が file・dir なら誤り、親の dir が無ければ fs.ErrNotExist。根の外を指す target も 作るだけなら通す (辿ると誤り)。mock の FS も symlink の節を持ち 根の中に解ける target だけを辿る (Lstat・Remove・RemoveAll・Rename・Readlink は link 自身)。
+- go: Proc に `Cmd.KillGroup`・`Cmd.KillGrace` (0 なら 5s)・`Result.Killed`。KillGroup の子は 新しい process group で起き ctx の終わりで group (孫まで) へ SIGTERM、猶予の後に SIGKILL。ctx の終わりで止めた時は KillGroup に依らず `Killed = true` で 誤りは ctx の誤りを包む (`errors.Is(err, context.Canceled)` 等で判る)。unix でない OS の KillGroup は誤り。子が自分で終えたのに孫が pipe を握って残る時は 猶予の後に exec.ErrWaitDelay を包む誤り (Killed = false)。mock は `outsidemock.NewProc(...).WithFunc(name, func(ctx, cmd) (outside.Result, error))` で ctx を受ける子を表せ Cmds() で KillGroup・KillGrace を読める。
+- lint-go: `os.Symlink`・`os.Readlink`・`os.Link` を落とす (→ FS)。今まで通っていた code が落ちうる。
+- 利用する側がやる事: outside.FS を自前で実装している型は Symlink・Readlink を足す。ctx の誤りを `==` で比べる所は `errors.Is` へ。孫まで止めたい子は `Cmd{KillGroup: true, KillGrace: ...}`。lint-go/v0.4.0 は go/v0.11.0 の後に上げる (symlink を FS へ移してから)。

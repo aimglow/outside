@@ -28,7 +28,7 @@ cases:
     requirement: REQ-OUT-CONTRACT
     behavior: Open・AppendFile・MkdirAll・Lstat・Rename・RemoveAll が real と mock で同じ振る舞いをする。
     input: 書いた file を Open で読む / AppendFile 2 回 / MkdirAll の入れ子 / Rename (根の中・根の外) / RemoveAll (dir・無い path・根) / Lstat (real は symlink を自分で作る)
-    expect: Open で書いた中身が読める・無い path は fs.ErrNotExist。AppendFile は 足した順に並ぶ。Rename の根の外は 誤り。RemoveAll は 中身ごと消え 無い path は 誤りでなく 根は 誤り。Lstat は symlink を IsSymlink で名乗る (mock の FS に symlink は無い)。
+    expect: Open で書いた中身が読める・無い path は fs.ErrNotExist。AppendFile は 足した順に並ぶ。Rename の根の外は 誤り。RemoveAll は 中身ごと消え 無い path は 誤りでなく 根は 誤り。Lstat は symlink を IsSymlink で名乗る (mock の FS の symlink は TC-OUT-FS-SYMLINK で作る)。
 
   - id: TC-OUT-FS-SYMLINK
     requirement: REQ-OUT-CONTRACT
