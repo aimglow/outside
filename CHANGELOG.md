@@ -150,3 +150,14 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 - scripts/sync-outside.sh: 置き場の入れ替えで 前の写しを失わない。新しい写しを用意し終えてから名前を付け替え、入れる mv が失敗したら 前の写しを戻して名乗る (戻せなければ 一時の dir を消さず その場所を名乗る)。kifune #244 の審査の指摘。
 - bash のまま置く理由 = 部品を repo へ入れる最初の口ゆえ 部品の無い repo で動く必要がある・設定の file を読まない (design.outside.yaml の consume.why_script)。
 - 利用する側がやる事: outside の main の scripts/sync-outside.sh を写し直す (部品の版は変わらない)。
+
+## go/v0.9.0 (2026-11-25)
+
+足した口 (各 project の本体の code が直に呼んでいた物の受け先):
+- Clock: `NewTimer(d) Timer` (`C()`・`Stop() bool`・`Reset(d) bool`)・`NewTicker(d) Ticker` (`C()`・`Stop()`)・`After(d)`。real は time を包む。mock は Advance・Sleep で 期限を過ぎた物を 期限の順 (同じ期限は掛けた順) に発火し その期限の時刻を送る (buffer 1・満ちていれば落とす = time と同じ。実時間を待たない)。経過 (Since・Until) は `Now()` から引く (口に足さない)。
+- FS: `Open` (io.ReadCloser で stream に読む)・`AppendFile` (無ければ作り 末尾に足す)・`MkdirAll`・`Lstat` (`FileInfo.IsSymlink` を足した)・`Rename` (両方の path が根の中。移し先の file は置き換え、dir・根は誤り)・`RemoveAll` (根は誤り・無い path は nil)。real は os.Root の上 (根の外を指す symlink は止まる)。mock FS も同じ誤りを返す。`IOFS(FS)` は FS.Open で読む。
+- Proc: `LookPath(name)`。宣言した program だけ (無い名前は ErrUndeclaredProgram、実行 file が無ければ exec.ErrNotFound)。mock は `outsidemock.NewProc(...).WithPaths(map[string]string{...})`。
+- RunTool の Set (limitFS・limitProc) も 足した method を宣言の範囲に絞る。
+- 足さない: Env の全部の一覧 (Environ)。宣言した名前だけを読ませる絞りを迂回させないため。子 process の環境は Proc (親の環境 + Cmd.Env)。
+
+利用する側がやる事: outside.FS・Clock・Proc を自前で実装している型は 足した method を実装する (outside の mock を使っていれば不要)。`time.NewTimer`・`time.NewTicker`・`time.After`・`os.Open`・`os.OpenFile(O_APPEND)`・`os.MkdirAll`・`os.Lstat`・`os.Rename`・`os.RemoveAll`・`exec.LookPath` を直に呼ぶ所は Set の Clock・FS・Proc へ移す。`time.Since(t)` は `clock.Now().Sub(t)`。
