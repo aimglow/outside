@@ -144,3 +144,9 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
   - go: Git を使っていた所は 各 project の adapters 層 `libs/platform/vcs-git-go` (interface / real / mock) へ移し git は `Proc` で起こす (outside.toml の programs に git を宣言する)。`outsidemock.NewGit` を使う test は その adapters の mock に替える。`Set`・`Base` を自前で組む所は `SysInfo`・`IdGen` を足す。`Base` で `requires_git_worktree` を使う所は `Base.Worktree` を渡す。
   - lint-go: 上げると 今まで通っていた code が落ちうる。先に go を v0.8.0 へ上げ、os.Hostname 等は SysInfo、乱数は IdGen を通す。入口の main.go・adapter_real.go は project 側の除外 (enforcement.md §3) に在る事を確かめる。
   - docs: docs/v0.7.0 を取り込む。
+
+## scripts (2026-11-24)
+
+- scripts/sync-outside.sh: 置き場の入れ替えで 前の写しを失わない。新しい写しを用意し終えてから名前を付け替え、入れる mv が失敗したら 前の写しを戻して名乗る (戻せなければ 一時の dir を消さず その場所を名乗る)。kifune #244 の審査の指摘。
+- bash のまま置く理由 = 部品を repo へ入れる最初の口ゆえ 部品の無い repo で動く必要がある・設定の file を読まない (design.outside.yaml の consume.why_script)。
+- 利用する側がやる事: outside の main の scripts/sync-outside.sh を写し直す (部品の版は変わらない)。

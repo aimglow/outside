@@ -276,6 +276,12 @@ versioning:
       sync-outside.sh <部品> <tag> (project の中に置く script)。一時の bare repo に その tag だけを取り
       (git fetch --depth 1)、git archive で 部品の path を取り出し place を丸ごと置き換え .outside-version (1 行目 = tag、2 行目 = 全体の指紋、続く行 = file ごとの指紋) を書く。部品の test (*_test.go・testdata/・*.test.*・*.spec.ts・*_test.dart・test/) は写さない (REQ-OUT-REAL-TESTED-HERE = 部品の test は この repo の中だけで回す)。
       GitHub は git archive --remote に応じないので 一時の bare repo を経る (実測 2026-11-24)。
+    replace: >
+      新しい写しを 置き場と同じ file system (repo の中の一時の dir) に用意し終えてから 名前を付け替える。前の写しは 新しい写しが入るまで消さない。
+      入れ替えの mv が失敗したら 前の写しを戻して名乗る。戻せなければ 一時の dir を消さずに その場所を名乗る (写しを黙って失わない)。
+    why_script: >
+      sync-outside.sh は 部品を repo へ入れる最初の口ゆえ どの部品も まだ置かれていない repo で動く必要がある (Go の道具にすると その道具を取る口が要る)。
+      設定の file を読まず 部品と置き場の対応は 名前から引く。ゆえに 1 本の自己完結した script として持ち 中身の検査は scripts/test-scripts.sh が持つ。
     fetch_from: https://github.com/aimglow/outside.git
     fetch_identity: git から取得するのは ccark-gitops の名義 (seat の検査も image の build (gitops) も 同じ)。
     go: project の go.mod は replace で libs/outside/go を指す (module path は github.com/aimglow/outside/go のまま)。

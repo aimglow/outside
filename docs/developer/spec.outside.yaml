@@ -172,6 +172,7 @@ cases:
       他の部品の tag・形の違う tag・在らない tag は 何も書かずに誤りで終わる。
     input: test が作った bare repo (2 つの部品と それぞれの tag) と 取り込み先の作業木 (place に古い写しと余分な file)
     mocks: 取得元は test が作った bare repo (網を使わない)
+    replace_failure: 置き場の親に書けない時と 新しい写しを入れる mv だけが失敗する時 (失敗する mv を PATH の先頭に置く) は 前の写しが 1 byte も変わらず 戻した事を名乗る。
     expect: place の中身が tag の中身 (部品の test を除く) と一致し 余分な file が消え .outside-version が tag。部品の test (*_test.go・testdata/・*.test.js・*_test.dart・test/) は写らず test でない file は写る。誤りの時は 取り込み先が 1 byte も変わらない。
 
   - id: TC-OUT-SYNC-CHECK

@@ -84,7 +84,17 @@ find "$work/out/$src" -depth -type d \( -name testdata -o -name test \) -exec rm
 files=$(manifest "$work/out/$src")
 { printf '%s\n' "$tag"; printf 'fingerprint sha256:%s\n' "$(printf '%s\n' "$files" | sha)"; printf '%s\n' "$files"; } > "$work/out/$src/.outside-version"
 
-mkdir -p "$(dirname "$dest")"
-if [ -e "$dest" ]; then mv "$dest" "$work/old"; fi
-mv "$work/out/$src" "$dest"
+# 入れ替え: 新しい写しを 置き場と同じ file system (repo の中の一時の dir) に用意し終えてから 名前を付け替える。
+# 前の写しは 新しい写しが入るまで消さない。入れ替えが失敗したら 前の写しを戻す。戻せなければ 一時の dir を消さずに その場所を名乗る。
+mkdir -p "$(dirname "$dest")" || die "$(dirname "$dest") を作れない (置き場は変えていない)"
+had_old=0
+if [ -e "$dest" ]; then mv "$dest" "$work/old" || die "前の写し $dest を退かせない (置き場は変えていない)"; had_old=1; fi
+if ! mv "$work/out/$src" "$dest"; then
+  if [ $had_old = 1 ]; then
+    if mv "$work/old" "$dest"; then die "新しい写しを $dest へ入れられない (前の写しを戻した)"; fi
+    trap - EXIT
+    die "新しい写しを $dest へ入れられず 前の写しも戻せない。前の写しは $work/old に残した (手で $dest へ戻す)"
+  fi
+  die "新しい写しを $dest へ入れられない (置き場は前から無い)"
+fi
 echo "sync-outside: $dest = $tag"

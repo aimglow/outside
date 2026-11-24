@@ -83,6 +83,27 @@ for args in "lint-platform go/v0.6.0" "lint-platform v0.6.0" "lint-platform lint
   [ "$(snapshot)" = "$before" ] && ok "誤り ($args) で 置き場が変わらない" || ng "誤り ($args) で 置き場が変わった"
 done
 
+# TC-OUT-SYNC: 置き場の親に書けず 入れ替えられない時は 前の写しが そのまま残る
+before=$(snapshot)
+chmod a-w "$dst/libs/outside"
+if (cd "$dst" && OUTSIDE_REPO="$w/src.git" "$here/sync-outside.sh" lint-platform lint-platform/v0.1.0 >/dev/null 2>&1); then ng "書けない置き場で 通った"; fi
+chmod u+w "$dst/libs/outside"
+[ "$(snapshot)" = "$before" ] && ok "入れ替えられない時 前の写しが残る" || ng "入れ替えられない時に 前の写しが変わった"
+ls -d "$dst"/.outside-sync.* >/dev/null 2>&1 && ng "一時の dir が残る (入れ替えの失敗)" || ok "一時の dir が残らない (入れ替えの失敗)"
+
+# TC-OUT-SYNC: 新しい写しを入れる mv だけが失敗した時 前の写しを戻す (失敗する mv を PATH の先頭に置く)
+mkdir -p "$w/failmv"
+cat > "$w/failmv/mv" <<'SH'
+#!/bin/sh
+case "$1" in */out/*) echo "mv: 試験で止めた" >&2; exit 1 ;; esac
+exec /bin/mv "$@"
+SH
+chmod +x "$w/failmv/mv"
+before=$(snapshot)
+if (cd "$dst" && PATH="$w/failmv:$PATH" OUTSIDE_REPO="$w/src.git" "$here/sync-outside.sh" lint-platform lint-platform/v0.1.0 >"$w/failmv.out" 2>&1); then ng "入れる mv の失敗で 通った"; fi
+[ "$(snapshot)" = "$before" ] && ok "入れる mv の失敗で 前の写しを戻す" || ng "入れる mv の失敗で 前の写しを失った: $(cat "$w/failmv.out")"
+grep -q "前の写しを戻した" "$w/failmv.out" && ok "戻した事を名乗る" || ng "戻した事を名乗らない: $(cat "$w/failmv.out")"
+
 # TC-OUT-RELEASE
 rel() { (cd "$src" && "$here/release.sh" "$1" "$2" --print); }
 [ "$(rel lint-platform minor)" = lint-platform/v0.3.0 ] && ok "lint-platform minor" || ng "lint-platform minor = $(rel lint-platform minor)"
