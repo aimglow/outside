@@ -13,7 +13,7 @@ case $level in major|minor|patch) ;; *) die "段は major|minor|patch" ;; esac
 cd "$(git rev-parse --show-toplevel)"
 
 # 出ている版の正本は origin の tag。打つ前に取り直し origin に無い tag を手元から消す。
-if git remote get-url origin >/dev/null 2>&1; then git fetch -q --tags --prune-tags origin; fi
+if git remote get-url origin >/dev/null 2>&1; then git fetch -q --prune --prune-tags origin; fi
 # 部品の形でない tag は作らない決まり。1 つでも在れば 何もせず止まる (紛れた tag の上に版を積まない)。
 bad=$(git tag -l | grep -vE '^(go|next|angular|flutter|lint-go|lint-ts|lint-dart|lint-platform|docs)/v[0-9]+\.[0-9]+\.[0-9]+$' || true)
 [ -z "$bad" ] || die "部品の形 (<部品>/vX.Y.Z) でない tag が在る: $(echo $bad)。消してから やり直す"
