@@ -1,6 +1,7 @@
 package outside_test
 
 import (
+	"errors"
 	"io/fs"
 	"testing"
 
@@ -180,4 +181,51 @@ func TestFSPerm_TC_OUT_FS_PERM_mock(t *testing.T) {
 		wantMode(t, f, "d/s.txt", 0o644)
 		wantMode(t, f, "d", 0o755)
 	})
+}
+
+// readOnlyContract は 空の根から始まる ro (NewReadOnlyFS) と 同じ根の def (NewFS) で TC-OUT-FS-READONLY を確かめる。
+// checkOverwrite が false (root の user で走る real) の時は 上書きの誤りを確かめない。
+func readOnlyContract(r permReporter, ro, def outside.FS, checkOverwrite bool) {
+	r.Helper()
+	if err := ro.WriteFile("done/mark", []byte("1")); err != nil {
+		r.Errorf("WriteFile(done/mark) = %v", err)
+		return
+	}
+	wantMode(r, ro, "done/mark", 0o444)
+	wantMode(r, ro, "done", 0o755)
+	if checkOverwrite {
+		for name, write := range map[string]func() error{
+			"ro.WriteFile":  func() error { return ro.WriteFile("done/mark", []byte("2")) },
+			"ro.AppendFile": func() error { return ro.AppendFile("done/mark", []byte("2")) },
+			"def.WriteFile": func() error { return def.WriteFile("done/mark", []byte("2")) },
+		} {
+			if err := write(); !errors.Is(err, fs.ErrPermission) {
+				r.Errorf("%s で 0444 の file を上書き = %v (want fs.ErrPermission)", name, err)
+			}
+		}
+		if b, err := ro.ReadFile("done/mark"); err != nil || string(b) != "1" {
+			r.Errorf("上書きを止めた後の中身 = %q, %v (want \"1\")", b, err)
+		}
+		wantMode(r, ro, "done/mark", 0o444)
+	}
+	if err := ro.Remove("done/mark"); err != nil {
+		r.Errorf("Remove(done/mark) = %v (dir に書けるので 消せる)", err)
+	}
+}
+
+func TestMockFS_TC_OUT_FS_READONLY(t *testing.T) {
+	ro, err := outsidemock.NewReadOnlyFS(outsidemock.Tree{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	readOnlyContract(t, ro, ro.DefaultView(), true)
+	// tree で宣言した物も 0444 = 書けない。
+	ro2, err := outsidemock.NewReadOnlyFS(outsidemock.Tree{"m.txt": "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantMode(t, ro2, "m.txt", 0o444)
+	if err := ro2.WriteFile("m.txt", []byte("y")); !errors.Is(err, fs.ErrPermission) {
+		t.Errorf("tree の 0444 の file を上書き = %v (want fs.ErrPermission)", err)
+	}
 }

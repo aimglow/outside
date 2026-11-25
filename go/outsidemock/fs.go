@@ -52,6 +52,15 @@ func NewPrivateFS(tree Tree) (*FS, error) {
 	return newFS(tree, 0o600, 0o700)
 }
 
+// NewReadOnlyFS は tree から 読み取り専用の file を置く FS を作る。作る file は 0444・dir は 0755 (tree で宣言した物も同じ)。
+// 持ち主の書く bit が無い 既に在る file への WriteFile・AppendFile は fs.ErrPermission (real と同じ)。
+func NewReadOnlyFS(tree Tree) (*FS, error) {
+	return newFS(tree, 0o444, 0o755)
+}
+
+// ReadOnlyView は 同じ木を file 0444・dir 0755 で作る FS を返す (real で 同じ根に NewReadOnlyFS を作るのと同じ)。記録は別。
+func (f *FS) ReadOnlyView() *FS { return &FS{st: f.st, filePerm: 0o444, dirPerm: 0o755} }
+
 // PrivateView は 同じ木を file 0600・dir 0700 で作る FS を返す (real で 同じ根に NewPrivateFS を作るのと同じ)。記録は別。
 func (f *FS) PrivateView() *FS { return &FS{st: f.st, filePerm: 0o600, dirPerm: 0o700} }
 
@@ -189,6 +198,10 @@ func (f *FS) write(op, c string, data []byte, appendMode bool) error {
 		return pathErr(op, c, fs.ErrNotExist)
 	}
 	old, existed := f.st.files[r]
+	if existed && f.st.perms[r]&0o200 == 0 {
+		// 持ち主の書く bit が無い file は 書けない (real は OS が EACCES で止める)。
+		return pathErr(op, c, fs.ErrPermission)
+	}
 	var out []byte
 	if appendMode {
 		out = append(out, old...)

@@ -137,6 +137,7 @@ ports:
         link が file か dir なら 誤り。link の親の dir が無ければ 誤り。根の外を指す target も 作るだけなら誤りにしない (辿る時に 根の外は誤り)。
         Readlink(link) は 記録した target を返す。symlink でなければ 誤り。
         権限: FS は 作る時に 自分が作る file と dir の権限を決める。既定 (NewFS) = file 0644・dir 0755。秘密を置く FS (NewPrivateFS) = file 0600・dir 0700 (同じ機体の他の user に読ませない)。
+        読み取り専用の file を置く FS (NewReadOnlyFS) = file 0444・dir 0755 (完了の印など 一度書いたら上書きさせない物)。持ち主の書く bit が無い 既に在る file への WriteFile・AppendFile は fs.ErrPermission (real は OS が止める。mock も同じ誤り。どの作り方の FS から書いても同じ)。
         呼び出しごとに権限を渡す口は持たない (渡し忘れで秘密が 0644 で書かれる形を作らない)。既に在る file を WriteFile・AppendFile しても 権限は変えない。
         Stat・Lstat の FileInfo.Mode は 権限の bit (fs.FileMode の Perm)。
         symlink を辿る操作 (ReadFile・Stat・Open 等) は 根の中に解ける target だけを辿る (real は os.Root、mock は 同じ規則で memory の木を辿る)。

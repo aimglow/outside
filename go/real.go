@@ -71,6 +71,12 @@ func NewPrivateFS(root string) (FS, error) {
 	return newRealFS(root, 0o600, 0o700)
 }
 
+// NewReadOnlyFS は root を根とする 読み取り専用の file を置く口を返す。作る file は 0444・dir は 0755
+// (完了の印など 一度書いたら上書きさせない物)。その file への 2 度目の書き込みは fs.ErrPermission。root 自身の権限は変えない。
+func NewReadOnlyFS(root string) (FS, error) {
+	return newRealFS(root, 0o444, 0o755)
+}
+
 func newRealFS(root string, filePerm, dirPerm fs.FileMode) (FS, error) {
 	info, err := os.Stat(root)
 	if err != nil {

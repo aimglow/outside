@@ -37,6 +37,13 @@ cases:
     mocks: real は test が作った dir だけを根にし umask の影響を受けない形で確かめる (作った後に Stat の Mode を見る)
     expect: real と mock で 同じ Mode。private の FS で作った物は 他の user の bit が 0。
 
+  - id: TC-OUT-FS-READONLY
+    requirement: REQ-OUT-CONTRACT
+    behavior: NewReadOnlyFS の FS が作る file は 0444・dir は 0755。その file への 2 度目の WriteFile・AppendFile は fs.ErrPermission で 中身は変わらない。既定の FS から書いても 同じ誤り。Remove は できる。
+    input: 新しい file の WriteFile (親の dir も) / 同じ file への WriteFile・AppendFile / 既定の FS からの WriteFile / Remove
+    mocks: real は test が作った dir だけを根にする (root の user で走る時は OS が権限を見ないので 上書きの確かめを飛ばし 飛ばした事を名乗る)
+    expect: real と mock で 同じ Mode・同じ誤り・中身が最初に書いた物のまま。
+
   - id: TC-OUT-FS-SYMLINK
     requirement: REQ-OUT-CONTRACT
     behavior: Symlink・Readlink が real と mock で同じ振る舞いをする。

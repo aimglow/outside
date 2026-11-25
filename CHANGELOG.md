@@ -254,3 +254,9 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 
 - go: SysInfo に `Getwd()`・`ConfigDir()`・`CacheDir()` (どれも `(string, error)`、引けなければ・空なら 誤り) と `Ppid() int` を足した。lint-go が『SysInfo を通す』で落とす呼び出し (os.Getwd・Getppid・UserConfigDir・UserCacheDir) に 受け先が無かったため (ccark #9970 の名指しは Getwd。同じ食い違いの残り 3 つも足した)。mock = `SysInfoValues` の `Getwd`・`ConfigDir`・`CacheDir`・`Ppid` (空なら 誤り・Ppid は 0)。
 - 利用する側がやる事: SysInfo を自前で実装している型は 足した 4 method を実装する (outside の real と mock だけなら 不要)。os.Getwd 等を直に呼ぶ所は Set.SysInfo へ。
+
+## go/v0.15.0 (2026-11-26)
+
+- go: `outside.NewReadOnlyFS(root)` を足した。この FS が作る file は 0444・dir は 0755 (完了の印など 一度書いたら上書きさせない物)。権限を呼び出しごとに渡す口・Chmod は持たない (NewPrivateFS と同じく 作る時に決める)。ccark #9970 の頼み。
+- go: 持ち主の書く bit が無い 既に在る file への WriteFile・AppendFile は fs.ErrPermission (real は OS が止める。mock も同じ誤りを返すようにした = どの作り方の FS から書いても同じ)。mock = `outsidemock.NewReadOnlyFS(tree)`・`ReadOnlyView()`。
+- 利用する側がやる事: os.WriteFile(path, b, 0o444) は NewReadOnlyFS の FS の WriteFile へ。mock で 0444 の file を上書きしていた test は fs.ErrPermission になる (real と同じ)。

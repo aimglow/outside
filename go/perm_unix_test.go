@@ -150,3 +150,21 @@ func TestFSPerm_TC_OUT_FS_PERM_陽性対照(t *testing.T) {
 		}
 	})
 }
+
+// TC-OUT-FS-READONLY (real): 0444 で作り 上書きは OS が止める。root の user は OS が権限を見ないので 上書きの確かめを飛ばし 名乗る。
+func TestRealFS_TC_OUT_FS_READONLY(t *testing.T) {
+	root := testDir(t)
+	ro, err := outside.NewReadOnlyFS(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	def, err := outside.NewFS(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := syscall.Geteuid() != 0
+	if !check {
+		t.Log("root の user で走っている: 0444 の file の上書きの誤りは 確かめない (OS が権限を見ない)")
+	}
+	readOnlyContract(t, ro, def, check)
+}
