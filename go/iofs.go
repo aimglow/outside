@@ -77,11 +77,12 @@ type fileInfo struct {
 
 func (i fileInfo) Name() string { return i.name }
 func (i fileInfo) Size() int64  { return i.info.Size }
+// Mode は FS の FileInfo.Mode (権限の bit) を返す。
 func (i fileInfo) Mode() fs.FileMode {
 	if i.info.IsDir {
-		return fs.ModeDir | 0o755
+		return fs.ModeDir | i.info.Mode
 	}
-	return 0o644
+	return i.info.Mode
 }
 
 // ModTime は outside の FS が時刻を持たない ∴ 零の時刻。

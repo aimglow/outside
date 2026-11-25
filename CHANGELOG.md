@@ -232,3 +232,9 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 - next (直し): src/index.ts・src/mock/index.ts の値の相対 import に 拡張子 (.ts) を付けた。Node が .ts を直に読む形 (型の除去、Node 24 以降の既定) で ERR_MODULE_NOT_FOUND になっていた (next/v0.3.0 で src/rule.ts を分けた時から。amatelas の名指し)。tsconfig に allowImportingTsExtensions (noEmit と組)。口の形は変えない。
 - next・angular: test に『node で src/index.ts と src/mock/index.ts を直に import できる』を足した (直す前の形で赤くなる事を確かめた)。angular は 今の形で読める = test を足しただけ。
 - 利用する側がやる事: next を v0.3.1 に上げる (node で直に読む project は 必ず)。angular は 上げなくてよい (振る舞いは同じ)。
+
+## go/v0.13.0 (2026-11-25)
+
+- go: `outside.NewPrivateFS(root)` を足した。この FS が作る file は 0600・dir は 0700 (NewFS は 今までどおり 0644・0755)。umask に依らず決めた権限で作る (作れた時だけ 開いた file / 作った dir に chmod)。既に在る file への WriteFile・AppendFile は 権限を変えない。呼び出しごとに権限を渡す口は持たない (渡し忘れで秘密が 0644 で書かれる形を作らない)。mock = `outsidemock.NewPrivateFS(tree)` (同じ木を別の権限で触る `PrivateView()`・`DefaultView()` も)。ccark #9969 の頼み (秘密を置く台帳を FS へ載せる)。
+- go: `FileInfo.Mode` (権限の bit) を足した。real の Stat・Lstat は 実の権限、mock は 記録した権限 (既定 file 0644・dir 0755)。Lstat が見た symlink は 0。`IOFS(FS)` の Mode も これを返す。
+- 利用する側がやる事: FileInfo を struct の値で比べる test は Mode を足すか 比べる field を絞る。FileInfo を位置で並べて作る code は直す。秘密 (鍵・台帳) は NewPrivateFS で開く。0644 で作った既存の file は 権限が変わらない = private に移すなら作り直す。umask を前提にした処理は見直す。
