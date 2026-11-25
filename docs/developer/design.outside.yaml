@@ -198,8 +198,31 @@ ports:
       methods: [read]
       rule: read(buf) は 渡した byte 列 (TS = Uint8Array、Dart = Uint8List) を全部埋める。real = crypto の乱数 (TS = crypto.getRandomValues、Dart = Random.secure)。
       mock: 種 (seed) で決まる byte 列を返す (同じ種・同じ呼び順なら同じ byte、分けて読んでも続けて読んでも同じ列)。読んだ長さを記録する。withErr で 以後の read が その誤りを投げる。
+  next_only:
+    # 部品 next だけが持つ Node の口 (angular・flutter は持たない)。名前と意味は backend_and_tools の同じ名の口に揃える。
+    - name: FS
+      does: 宣言した根の下の file を読む・書く・一覧する。
+      methods: [readFile, writeFile, readDir, stat, remove, mkdirAll]
+      rule: >
+        path は 根からの相対 (区切りは /)。絶対 path と 根の外へ出る path は 誤り (読まない)。無い path は code = 'ENOENT' の誤りで reject。
+        readFile は Uint8Array。writeFile は Uint8Array か string (UTF-8) を書き 親の dir が無ければ作る。readDir は 名前の順の {name, isDir}。stat は {name, size, isDir}。
+        remove は file か 空の dir を消す (根は誤り)。mkdirAll は 入れ子の dir を作る (在れば何もしない)。
+        real は createRealFS(root) (node:fs/promises。symlink で根の外へ出る path も誤り)。createRealSet に fsRoot を渡さなければ 使った時に 根が宣言されていないと名乗って reject。
+      mock: >
+        memory の上の木。createMockFS(tree) の tree は 相対 path → 中身 (string か Uint8Array) の表 (空の dir は 末尾 / の path)。絶対 path と 根の外の宣言は 誤り。
+        disk に木を作らない。呼び出しを calls に残す。
+    - name: Proc
+      does: 宣言した名前の program を起こし 結果を返す。
+      methods: [run]
+      rule: >
+        run(cmd) の cmd = {name, args, dir?, env?, unset?, stdin?, signal?}。結果 = {exitCode, stdout, stderr} (stdout・stderr は Uint8Array)。0 以外の exitCode も 誤りでなく 結果で返る。
+        宣言に無い name は 誤り。子の環境変数 = 親の環境変数から unset を外し env を足した物。stdin は 子の標準入力 (秘密を disk にも argv にも載せない)。signal が abort したら 子を止めて reject。
+        real は createRealProc(programs) (programs = 名前 → 実行 file の path、空なら PATH から探す。node:child_process の execFile 系。shell を通さない)。createRealSet に programs を渡さなければ 全ての name が宣言に無い誤り。
+      mock: >
+        createMockProc(programs) の programs = 名前 → 結果を決める関数 (cmd を受け {exitCode, stdout, stderr} か {error})。宣言に無い名前は reject。
+        起こされた cmd (name・args・dir・env・unset・stdin) を calls に残す。親の環境変数と実の process を使わない。
   runtime:
-    next: Node と Next.js の server・client。Config の real は 渡した値の表 → process.env の順に引く。Storage の real は 使う時に localStorage・sessionStorage を取る (server では 渡した Web Storage の形を使う)。
+    next: Node と Next.js の server・client。FS・Proc (next_only) も持つ。Config の real は 渡した値の表 → process.env の順に引く。Storage の real は 使う時に localStorage・sessionStorage を取る (server では 渡した Web Storage の形を使う)。
     angular: browser。Config の real は 渡した値の表だけを引く (process を見ない)。DI の token は 各 project の adapters 層が持つ (@angular/core に依存しない)。
     flutter: iOS と Android。Http の real は dart:io の HttpClient。Config の real は 渡した値の表 → 環境変数の順。Storage の real は 保存先を渡して使う (端末の保存の plugin は adapters 層が持つ)。
 
@@ -378,4 +401,4 @@ open:
   - sync-outside.sh 自身の版の配り方 (今は 各 project が main から写し CHANGELOG の scripts の項で写し直す)
   - 部品の間に 版の前提 (例 lint-go が go の新しい口の名前を前提にする) が生じたら その時に 前提を宣言する形を決める
   - Go の FS の method の最小の組 (足りない物は MINOR で足す)
-  - next の Node 向けの FS・Proc・Env (今の next は frontend_and_mobile の組だけ。Node の server の処理が要る project が出たら backend_and_tools の組を TypeScript で足す)
+  - next の Env (環境変数は Config が values → process.env で引く。名で読む口が別に要る project が出たら足す)

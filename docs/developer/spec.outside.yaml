@@ -97,6 +97,19 @@ cases:
     input: 16 byte と 8 byte の read を続けて / 同じ種の 2 つの mock / 違う種 / 24 byte を 1 回と 16+8 / withErr
     expect: 全部埋まる (real は 続けて読んだ 16 byte が互いに違う)。同じ種は同じ byte、違う種は違う byte、分けても同じ列。記録は 長さの順。withErr の後は その誤りを投げる。
 
+  - id: TC-OUT-NEXT-FS
+    requirement: REQ-OUT-CONTRACT
+    behavior: next の FS は real と mock で 同じ契約を通す。
+    input: 書いた file を読む (Uint8Array と string) / 親の無い path への writeFile / readDir の順 / stat (file と dir) / 無い path / 根の外 (../x と 絶対 path) / remove (file・空の dir・中身の在る dir・根) / mkdirAll の入れ子 / mock の tree の宣言 (空の dir・根の外の宣言)
+    mocks: real は test が作った dir だけを根にする
+    expect: 読めた中身が書いた物と一致。無い path は code ENOENT。根の外は 誤り。中身の在る dir の remove と 根の remove は 誤り。real と mock で 同じ結果。
+
+  - id: TC-OUT-NEXT-PROC
+    requirement: REQ-OUT-CONTRACT
+    behavior: next の Proc は 宣言した program を起こし exitCode・stdout・stderr を返し stdin・env・unset を子へ渡す。宣言に無い名前は 誤り。
+    input: real = test が作った script (node で動く) を path で宣言 / echo・exit 3・stdin の cat・env の出力・unset / 宣言に無い名前 / signal の abort。mock = 結果を決める関数
+    expect: real と mock で 同じ結果。0 以外の exit は 結果。宣言に無い名前は reject。mock の calls に stdin・env・unset が残る。
+
   - id: TC-OUT-NO-TOOL-NAME
     requirement: REQ-OUT-NO-TOOL-NAME
     behavior: Go の部品は 特定のツールの名前の口を持たず git の program を起こさない (requires_git_worktree は .git を探して確かめる)。
