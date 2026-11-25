@@ -18,7 +18,7 @@ import type {
   Random,
   Storage,
   TimerHandle,
-} from '../index';
+} from '../index.ts';
 import {
   OUTSIDE_ROOT,
   abortError,
@@ -31,7 +31,7 @@ import {
   rootRemoval,
   toBytes,
   undeclaredProgram,
-} from '../rule';
+} from '../rule.ts';
 
 export type MockClockCall =
   | { method: 'now' }

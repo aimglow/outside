@@ -16,10 +16,10 @@ import {
   rootRemoval,
   toBytes,
   undeclaredProgram,
-} from './rule';
+} from './rule.ts';
 import type { SpawnOptions } from 'node:child_process';
 
-export { NO_ROOT, OUTSIDE_ROOT, UNDECLARED_PROGRAM, type OutsideError } from './rule';
+export { NO_ROOT, OUTSIDE_ROOT, UNDECLARED_PROGRAM, type OutsideError } from './rule.ts';
 
 /** timer の控え。clearTimeout に渡すためだけに使う。 */
 export type TimerHandle = unknown;

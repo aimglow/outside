@@ -226,3 +226,9 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
   - Proc: `run({name, args, dir?, env?, unset?, stdin?, signal?})` → `{exitCode, stdout, stderr}`。0 以外の exit は 結果で返る (reject しない)。宣言に無い名前は `EUNDECLARED`。shell を通さない。abort は `ABORT_ERR`。real = `createRealProc(programs)` (path が空の名前は 子の環境変数の PATH から探す)、mock = `createMockProc(programs)` (calls に name・args・dir・env・unset・stdin)。
   - set: `OutsideSet` に `fs`・`proc`。`createRealSet` の options に `fsRoot`・`programs`、`createMockSet` に `tree`・`programs`。宣言しなければ 使った時に `ENOROOT`・`EUNDECLARED` で reject = 今の呼び手は壊れない。
 - 利用する側がやる事: `./scripts/sync-outside.sh next next/v0.3.0`。node:fs・node:child_process を直に触る所は `set.fs`・`set.proc` へ (real は `createRealSet({ fsRoot, programs })`、test は `createMockSet({ startMs, tree, programs })`)。`OutsideSet` を手で組む所は `fs`・`proc` を足す。誤りは `code` で分け 子の結果は `exitCode` を見る。
+
+## next/v0.3.1・angular/v0.2.1 (2026-11-25)
+
+- next (直し): src/index.ts・src/mock/index.ts の値の相対 import に 拡張子 (.ts) を付けた。Node が .ts を直に読む形 (型の除去、Node 24 以降の既定) で ERR_MODULE_NOT_FOUND になっていた (next/v0.3.0 で src/rule.ts を分けた時から。amatelas の名指し)。tsconfig に allowImportingTsExtensions (noEmit と組)。口の形は変えない。
+- next・angular: test に『node で src/index.ts と src/mock/index.ts を直に import できる』を足した (直す前の形で赤くなる事を確かめた)。angular は 今の形で読める = test を足しただけ。
+- 利用する側がやる事: next を v0.3.1 に上げる (node で直に読む project は 必ず)。angular は 上げなくてよい (振る舞いは同じ)。
