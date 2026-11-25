@@ -29,7 +29,11 @@ if [ "$print" = "--print" ]; then echo "$tag"; exit 0; fi
 [ -d "$dir" ] || die "部品の dir $dir が無い"
 [ -z "$(git status --porcelain)" ] || die "作業木に commit していない変更がある"
 case $comp in
-  go|lint-go|lint-platform) (cd "$dir" && go vet ./... && go test -count=1 ./...) ;;
+  go|lint-go|lint-platform)
+    # 取り込んだ project の gofmt の段で落ちない形だけを tag にする (写しは project で直せない)。
+    unformatted=$(cd "$dir" && gofmt -l . | grep -v '^vendor/' || true)
+    [ -z "$unformatted" ] || die "gofmt していない file が在る ($dir): $(echo $unformatted)"
+    (cd "$dir" && go vet ./... && go test -count=1 ./...) ;;
   lint-ts|next|angular) (cd "$dir" && pnpm install --frozen-lockfile && pnpm test) ;;
   lint-dart|flutter) (cd "$dir" && dart pub get && dart test) ;;
   docs) ;;

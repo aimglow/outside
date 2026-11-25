@@ -112,6 +112,14 @@ rel() { (cd "$src" && "$here/release.sh" "$1" "$2" --print); }
 g -C "$src" tag lint-platform/v0.10.0
 [ "$(rel lint-platform patch)" = lint-platform/v0.10.1 ] && ok "版は数で比べる (0.10 > 0.2)" || ng "版の比べ方 = $(rel lint-platform patch)"
 
+# TC-OUT-RELEASE: gofmt していない Go の部品には tag を打たない
+printf 'package g\nfunc  F() {}\n' > "$src/go/f.go"
+g -C "$src" add -A && g -C "$src" commit -qm fmt
+out=$( (cd "$src" && "$here/release.sh" go patch) 2>&1 ) && ng "gofmt していない部品で release が通った" || {
+  printf '%s' "$out" | grep -q "gofmt していない file が在る (go): f.go" && ok "gofmt していない部品は 名乗って止まる" || ng "gofmt の止まり方が違う: $out"; }
+[ -z "$(g -C "$src" tag -l 'go/v0.6.1')" ] && ok "gofmt で止まった時 tag を打たない" || ng "gofmt で止まったのに tag が在る"
+g -C "$src" rm -q go/f.go && g -C "$src" commit -qm unfmt
+
 g -C "$src" tag v9.9.9
 if rel lint-platform patch >/dev/null 2>&1; then ng "部品の形でない tag が在るのに 版を出した"; else ok "部品の形でない tag が在れば止まる"; fi
 g -C "$src" tag -d v9.9.9 >/dev/null

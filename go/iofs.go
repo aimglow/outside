@@ -77,6 +77,7 @@ type fileInfo struct {
 
 func (i fileInfo) Name() string { return i.name }
 func (i fileInfo) Size() int64  { return i.info.Size }
+
 // Mode は FS の FileInfo.Mode (権限の bit) を返す。
 func (i fileInfo) Mode() fs.FileMode {
 	if i.info.IsDir {

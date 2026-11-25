@@ -243,3 +243,9 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 
 - go (test の直しだけ): TC-OUT-CLOCK-TIMER の real の test が 負荷の下で時々落ちた。Reset の後に測った時刻を 新しい期限の下限にしていたため (Reset から Now までの間だけ 下限が先へずれる)。下限を Reset の前に測る形にした (-race で 30 回続けて通る)。口と振る舞いは変えない。
 - 利用する側がやる事: 無い (部品の test は取り込まない)。
+
+## go/v0.13.2 (2026-11-25)
+
+- go (直し): go/v0.13.0・v0.13.1 の go/iofs.go が gofmt していない形だった (doc の comment の前の空行。門番が v0.13.0 で IOFS の Mode を直した時に gofmt を回さずに出した)。取り込んだ project の push 前の gofmt の段で落ちる (daikokuten の名指し)。gofmt した。口と振る舞いは変えない。
+- scripts/release.sh: go・lint-go・lint-platform は gofmt していない file (vendor を除く) が在れば tag を打たずに止まる (写しは project で直せないため)。scripts/test-scripts.sh に その確かめ (止め方を外すと赤くなる事も確かめた)。
+- 利用する側がやる事: go/v0.13.0・v0.13.1 を取り込んだ project は ./scripts/sync-outside.sh go go/v0.13.2。
