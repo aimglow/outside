@@ -21,7 +21,7 @@ type Proc struct {
 	cmds     []outside.Cmd
 }
 
-// Cmds は 起こされた Cmd を 起こされた順に返す (Stdin・Env・Dir・KillGroup・KillGrace まで test から読める)。
+// Cmds は 起こされた Cmd を 起こされた順に返す (Stdin・Env・Unset・Dir・KillGroup・KillGrace まで test から読める)。
 func (p *Proc) Cmds() []outside.Cmd {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -29,6 +29,7 @@ func (p *Proc) Cmds() []outside.Cmd {
 	for i, c := range p.cmds {
 		c.Args = append([]string(nil), c.Args...)
 		c.Env = append([]string(nil), c.Env...)
+		c.Unset = append([]string(nil), c.Unset...)
 		c.Stdin = append([]byte(nil), c.Stdin...)
 		out[i] = c
 	}

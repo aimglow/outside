@@ -213,3 +213,8 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
   - 理由 1: repo の根に go.work を持つ project では `go -C libs/outside/lint-platform run .` が build できない (go.work が その dir を包まない。kifune の実測)。`GOWORK=off` で lint-platform 自身の module と vendor で build する。
   - 理由 2: `go run` は 道具の exit 3 (判定不能) を exit 1 に潰す (門番の実測) = 判定不能が違反に見える。build した道具は 0・1・3 をそのまま返す。
 - 利用する側がやる事: push の前の段の run を 新しい形に替える (lint-platform の版は変わらない)。`.work/` を .gitignore に入れる。別の撃ち方 (go.mod の tool 等) を取るなら 判定不能の宣言で exit 3 が返る事を 1 度確かめる。
+
+## go/v0.12.0 (2026-11-25)
+
+- go: Proc の `Cmd.Unset []string` を足した (子へ渡さない 親の環境変数の名)。子の環境変数 = 親の環境変数から Unset の名を外し Env を足した物 (Unset を先に当てる = Env で同じ名を足せば Env が効く)。外の program の向き先を変える変数を 子へ継がせない時に使う。mock は Unset を Cmds() に記録する (親の環境変数は読まない)。kifune の頼み。
+- 利用する側がやる事: 足すだけ (Cmd に field が増えた。Cmd を位置で組む所は無いはず)。継いだ変数を外したい所は Unset に名を書く。

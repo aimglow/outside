@@ -14,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -452,7 +453,7 @@ func (p realProc) Run(ctx context.Context, c Cmd) (Result, error) {
 	}
 	cmd := exec.CommandContext(ctx, file, c.Args...)
 	cmd.Dir = c.Dir
-	cmd.Env = append(os.Environ(), c.Env...)
+	cmd.Env = append(withoutNames(os.Environ(), c.Unset), c.Env...)
 	if c.Stdin != nil {
 		cmd.Stdin = bytes.NewReader(c.Stdin)
 	}
@@ -644,4 +645,22 @@ func RunTool(declPath string, fn func(Set) error) error {
 		},
 	}
 	return RunToolWith(decl, base, fn)
+}
+
+// withoutNames は NAME=値 の並びから names の名の物を外す。
+func withoutNames(env, names []string) []string {
+	if len(names) == 0 {
+		return env
+	}
+	drop := make(map[string]bool, len(names))
+	for _, n := range names {
+		drop[n] = true
+	}
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		if name, _, _ := strings.Cut(kv, "="); !drop[name] {
+			out = append(out, kv)
+		}
+	}
+	return out
 }

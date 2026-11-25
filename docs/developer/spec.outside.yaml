@@ -48,6 +48,12 @@ cases:
       real: Run は ctx の誤りを包み Killed = true。孫の pid に signal 0 が届かない (止まっている)。SIGTERM を無視する子も KillGrace の後に止まる。自分で終えた子は Killed = false で誤り無し。
       mock: Killed = true と ctx の誤り。Cmds() に KillGroup・KillGrace が残る。
 
+  - id: TC-OUT-PROC-UNSET
+    requirement: REQ-OUT-CONTRACT
+    behavior: Cmd.Unset の名は 親の環境変数に在っても 子へ渡らない。Env で同じ名を足せば Env の値が渡る。mock は Unset を記録し 親の環境変数を読まない。
+    input: real = test が自分で設けた環境変数 (t.Setenv) と それを出力する helper / Unset なし・Unset あり・Unset と Env に同じ名。mock = Unset を持つ Cmd
+    expect: real は 渡る・渡らない・Env の値 の順。mock の Cmds() の Unset が 渡した物と一致する。
+
   - id: TC-OUT-PROC-LOOKPATH
     requirement: REQ-OUT-TOOL-ENV
     behavior: LookPath は 宣言した program の path を返し 宣言に無い名前は ErrUndeclaredProgram。

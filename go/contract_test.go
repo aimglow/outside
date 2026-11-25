@@ -50,6 +50,13 @@ func helperMain(args []string) {
 		b, _ := io.ReadAll(os.Stdin)
 		os.Stdout.Write(b)
 		os.Exit(0)
+	case "getenv":
+		if v, ok := os.LookupEnv(args[1]); ok {
+			fmt.Print("set:" + v)
+		} else {
+			fmt.Print("unset")
+		}
+		os.Exit(0)
 	}
 	os.Exit(64)
 }
@@ -973,4 +980,50 @@ func TestProc_TC_OUT_PROC_LOOKPATH(t *testing.T) {
 			t.Errorf("記録 = %+v", got)
 		}
 	})
+}
+
+// TC-OUT-PROC-UNSET (real): Unset の名は 親に在っても 子へ渡らない。Env で同じ名を足せば Env が効く。
+// 触る環境変数は この test が t.Setenv で設けた物だけ。
+func TestRealProc_TC_OUT_PROC_UNSET(t *testing.T) {
+	const name = "OUTSIDE_TEST_PROC_UNSET"
+	t.Setenv(name, "parent")
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := outside.NewProc(map[string]string{"helper": self})
+	run := func(c outside.Cmd) string {
+		t.Helper()
+		c.Name, c.Args = "helper", []string{"outside-helper", "getenv", name}
+		res, err := p.Run(context.Background(), c)
+		if err != nil || res.ExitCode != 0 {
+			t.Fatalf("Run = %+v, %v", res, err)
+		}
+		return string(res.Stdout)
+	}
+	for _, tc := range []struct {
+		label string
+		cmd   outside.Cmd
+		want  string
+	}{
+		{"Unset なし", outside.Cmd{}, "set:parent"},
+		{"Unset あり", outside.Cmd{Unset: []string{name}}, "unset"},
+		{"Unset と Env に同じ名", outside.Cmd{Unset: []string{name}, Env: []string{name + "=child"}}, "set:child"},
+		{"別の名の Unset", outside.Cmd{Unset: []string{name + "_OTHER"}}, "set:parent"},
+	} {
+		if got := run(tc.cmd); got != tc.want {
+			t.Errorf("%s = %q (want %q)", tc.label, got, tc.want)
+		}
+	}
+}
+
+// TC-OUT-PROC-UNSET (mock): Cmds() に Unset が そのまま残る。
+func TestMockProc_TC_OUT_PROC_UNSET(t *testing.T) {
+	p := outsidemock.NewProc(map[string]func(outside.Cmd) outside.Result{"x": nil})
+	if _, err := p.Run(context.Background(), outside.Cmd{Name: "x", Unset: []string{"A", "B"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Cmds()[0].Unset; !reflect.DeepEqual(got, []string{"A", "B"}) {
+		t.Errorf("記録の Unset = %q", got)
+	}
 }

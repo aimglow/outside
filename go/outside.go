@@ -139,6 +139,9 @@ type Cmd struct {
 	Dir string
 	// Env は 子 process に足す環境変数 (NAME=値)。
 	Env []string
+	// Unset は 親の環境変数から外して 子へ渡さない名。Env より先に当てる (Env で同じ名を足せば Env が効く)。
+	// 外の program の向き先を変える変数を 子へ継がせない時に使う。
+	Unset []string
 	// Stdin は 子 process の標準入力に渡す中身。nil なら 何も渡さない。
 	// 秘密 (鍵・password) を disk にも argv にも載せずに渡す時に使う。
 	Stdin []byte
