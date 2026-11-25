@@ -23,17 +23,49 @@ type Tree map[string]string
 // 辿る操作 (ReadFile・WriteFile・AppendFile・ReadDir・Stat・Open・MkdirAll) は 根の中に解ける target だけを辿る
 // (相対の target は link の dir からの相対。絶対 path と 根の外へ出る target は ErrOutsideRoot。循環は 上限で誤り)。
 // Lstat・Remove・RemoveAll・Rename・Readlink は 最後の名前の symlink を辿らず link 自身を扱う (途中の dir の symlink は辿る)。
+// 新しく作る file と dir の権限は 作り方で決まる (NewFS = file 0644・dir 0755、NewPrivateFS = file 0600・dir 0700)。
+// file と dir ごとに権限を記録し Stat・Lstat の Mode で返す。既に在る file を書いても 権限は変えない。
 type FS struct {
 	recorder
+	st       *fsState
+	filePerm fs.FileMode
+	dirPerm  fs.FileMode
+}
+
+// fsState は memory の木。PrivateView・DefaultView で 同じ木を 違う権限の FS から触れる。
+type fsState struct {
 	mu    sync.Mutex
 	files map[string][]byte
 	dirs  map[string]bool
 	links map[string]string
+	// perms は file と dir の権限 (symlink は持たない)。
+	perms map[string]fs.FileMode
 }
 
-// NewFS は tree から FS を作る。
+// NewFS は tree から FS を作る。作る file は 0644・dir は 0755 (tree で宣言した物も同じ)。
 func NewFS(tree Tree) (*FS, error) {
-	f := &FS{files: map[string][]byte{}, dirs: map[string]bool{".": true}, links: map[string]string{}}
+	return newFS(tree, 0o644, 0o755)
+}
+
+// NewPrivateFS は tree から 秘密を置く FS を作る。作る file は 0600・dir は 0700 (tree で宣言した物も同じ)。
+func NewPrivateFS(tree Tree) (*FS, error) {
+	return newFS(tree, 0o600, 0o700)
+}
+
+// PrivateView は 同じ木を file 0600・dir 0700 で作る FS を返す (real で 同じ根に NewPrivateFS を作るのと同じ)。記録は別。
+func (f *FS) PrivateView() *FS { return &FS{st: f.st, filePerm: 0o600, dirPerm: 0o700} }
+
+// DefaultView は 同じ木を file 0644・dir 0755 で作る FS を返す (real で 同じ根に NewFS を作るのと同じ)。記録は別。
+func (f *FS) DefaultView() *FS { return &FS{st: f.st, filePerm: 0o644, dirPerm: 0o755} }
+
+func newFS(tree Tree, filePerm, dirPerm fs.FileMode) (*FS, error) {
+	st := &fsState{
+		files: map[string][]byte{},
+		dirs:  map[string]bool{".": true},
+		links: map[string]string{},
+		perms: map[string]fs.FileMode{".": dirPerm},
+	}
+	f := &FS{st: st, filePerm: filePerm, dirPerm: dirPerm}
 	keys := make([]string, 0, len(tree))
 	for k := range tree {
 		keys = append(keys, k)
@@ -63,26 +95,30 @@ func NewFS(tree Tree) (*FS, error) {
 // mkdirAll は p と その親を dir にする。途中が file なら 誤り。
 func (f *FS) mkdirAll(p string) error {
 	for d := p; d != "."; d = path.Dir(d) {
-		if _, isFile := f.files[d]; isFile {
+		if _, isFile := f.st.files[d]; isFile {
 			return pathErr("mkdir", d, errors.New("file が在る"))
 		}
-		if _, isLink := f.links[d]; isLink {
+		if _, isLink := f.st.links[d]; isLink {
 			return pathErr("mkdir", d, errors.New("symlink が在る"))
 		}
-		f.dirs[d] = true
+		if !f.st.dirs[d] {
+			f.st.dirs[d] = true
+			f.st.perms[d] = f.dirPerm
+		}
 	}
 	return nil
 }
 
 // put は p に file を置く。親の dir は 無ければ作る。
 func (f *FS) put(p string, data []byte) error {
-	if f.dirs[p] {
+	if f.st.dirs[p] {
 		return pathErr("write", p, errors.New("dir が在る"))
 	}
 	if err := f.mkdirAll(path.Dir(p)); err != nil {
 		return err
 	}
-	f.files[p] = append([]byte(nil), data...)
+	f.st.files[p] = append([]byte(nil), data...)
+	f.st.perms[p] = f.filePerm
 	return nil
 }
 
@@ -104,7 +140,7 @@ func (f *FS) resolve(c string, followLast bool) (string, error) {
 	hops := 0
 	for i := 0; i < len(parts); i++ {
 		next := path.Join(cur, parts[i])
-		target, isLink := f.links[next]
+		target, isLink := f.st.links[next]
 		if !isLink || (i == len(parts)-1 && !followLast) {
 			cur = next
 			continue
@@ -146,17 +182,21 @@ func (f *FS) write(op, c string, data []byte, appendMode bool) error {
 	if err != nil {
 		return err
 	}
-	if r == "." || f.dirs[r] {
+	if r == "." || f.st.dirs[r] {
 		return pathErr(op, c, errors.New("dir が在る"))
 	}
-	if !f.dirs[path.Dir(r)] {
+	if !f.st.dirs[path.Dir(r)] {
 		return pathErr(op, c, fs.ErrNotExist)
 	}
+	old, existed := f.st.files[r]
 	var out []byte
 	if appendMode {
-		out = append(out, f.files[r]...)
+		out = append(out, old...)
 	}
-	f.files[r] = append(out, data...)
+	f.st.files[r] = append(out, data...)
+	if !existed {
+		f.st.perms[r] = f.filePerm
+	}
 	return nil
 }
 
@@ -166,16 +206,16 @@ func (f *FS) ReadFile(p string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.st.mu.Lock()
+	defer f.st.mu.Unlock()
 	r, err := f.resolve(c, true)
 	if err != nil {
 		return nil, err
 	}
-	if data, ok := f.files[r]; ok {
+	if data, ok := f.st.files[r]; ok {
 		return append([]byte(nil), data...), nil
 	}
-	if f.dirs[r] {
+	if f.st.dirs[r] {
 		return nil, pathErr("read", c, errors.New("dir は読めない"))
 	}
 	return nil, pathErr("read", c, fs.ErrNotExist)
@@ -187,8 +227,8 @@ func (f *FS) WriteFile(p string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.st.mu.Lock()
+	defer f.st.mu.Unlock()
 	return f.write("write", c, data, false)
 }
 
@@ -198,31 +238,31 @@ func (f *FS) ReadDir(p string) ([]outside.DirEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.st.mu.Lock()
+	defer f.st.mu.Unlock()
 	r, err := f.resolve(c, true)
 	if err != nil {
 		return nil, err
 	}
-	if _, ok := f.files[r]; ok {
+	if _, ok := f.st.files[r]; ok {
 		return nil, pathErr("readdir", c, errors.New("dir ではない"))
 	}
-	if !f.dirs[r] {
+	if !f.st.dirs[r] {
 		return nil, pathErr("readdir", c, fs.ErrNotExist)
 	}
 	out := []outside.DirEntry{}
-	for name := range f.files {
+	for name := range f.st.files {
 		if path.Dir(name) == r {
 			out = append(out, outside.DirEntry{Name: path.Base(name)})
 		}
 	}
 	// symlink は 辿らずに 1 件 (IsDir = false。real の ReadDir と同じ)。
-	for name := range f.links {
+	for name := range f.st.links {
 		if path.Dir(name) == r {
 			out = append(out, outside.DirEntry{Name: path.Base(name)})
 		}
 	}
-	for name := range f.dirs {
+	for name := range f.st.dirs {
 		if name != "." && path.Dir(name) == r {
 			out = append(out, outside.DirEntry{Name: path.Base(name), IsDir: true})
 		}
@@ -237,34 +277,34 @@ func (f *FS) Stat(p string) (outside.FileInfo, error) {
 	if err != nil {
 		return outside.FileInfo{}, err
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.st.mu.Lock()
+	defer f.st.mu.Unlock()
 	r, err := f.resolve(c, true)
 	if err != nil {
 		return outside.FileInfo{}, err
 	}
-	if data, ok := f.files[r]; ok {
-		return outside.FileInfo{Name: path.Base(c), Size: int64(len(data))}, nil
+	if data, ok := f.st.files[r]; ok {
+		return outside.FileInfo{Name: path.Base(c), Size: int64(len(data)), Mode: f.st.perms[r]}, nil
 	}
-	if f.dirs[r] {
-		return outside.FileInfo{Name: path.Base(c), IsDir: true}, nil
+	if f.st.dirs[r] {
+		return outside.FileInfo{Name: path.Base(c), IsDir: true, Mode: f.st.perms[r]}, nil
 	}
 	return outside.FileInfo{}, pathErr("stat", c, fs.ErrNotExist)
 }
 
 // hasChild は dir r の直下に 何か在るかを返す。
 func (f *FS) hasChild(r string) bool {
-	for name := range f.files {
+	for name := range f.st.files {
 		if path.Dir(name) == r {
 			return true
 		}
 	}
-	for name := range f.links {
+	for name := range f.st.links {
 		if path.Dir(name) == r {
 			return true
 		}
 	}
-	for name := range f.dirs {
+	for name := range f.st.dirs {
 		if name != "." && path.Dir(name) == r {
 			return true
 		}
@@ -279,8 +319,8 @@ func (f *FS) Remove(p string) error {
 	if err != nil {
 		return err
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.st.mu.Lock()
+	defer f.st.mu.Unlock()
 	if c == "." {
 		return pathErr("remove", c, errors.New("根は消せない"))
 	}
@@ -288,15 +328,16 @@ func (f *FS) Remove(p string) error {
 	if err != nil {
 		return err
 	}
-	if _, ok := f.links[r]; ok {
-		delete(f.links, r)
+	if _, ok := f.st.links[r]; ok {
+		delete(f.st.links, r)
 		return nil
 	}
-	if _, ok := f.files[r]; ok {
-		delete(f.files, r)
+	if _, ok := f.st.files[r]; ok {
+		delete(f.st.files, r)
+		delete(f.st.perms, r)
 		return nil
 	}
-	if !f.dirs[r] {
+	if !f.st.dirs[r] {
 		return pathErr("remove", c, fs.ErrNotExist)
 	}
 	if r == "." {
@@ -305,7 +346,8 @@ func (f *FS) Remove(p string) error {
 	if f.hasChild(r) {
 		return pathErr("remove", c, errors.New("dir が空ではない"))
 	}
-	delete(f.dirs, r)
+	delete(f.st.dirs, r)
+	delete(f.st.perms, r)
 	return nil
 }
 
@@ -316,16 +358,16 @@ func (f *FS) Open(p string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.st.mu.Lock()
+	defer f.st.mu.Unlock()
 	r, err := f.resolve(c, true)
 	if err != nil {
 		return nil, err
 	}
-	if data, ok := f.files[r]; ok {
+	if data, ok := f.st.files[r]; ok {
 		return io.NopCloser(bytes.NewReader(append([]byte(nil), data...))), nil
 	}
-	if f.dirs[r] {
+	if f.st.dirs[r] {
 		return nil, pathErr("open", c, errors.New("dir は読めない"))
 	}
 	return nil, pathErr("open", c, fs.ErrNotExist)
@@ -337,8 +379,8 @@ func (f *FS) AppendFile(p string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.st.mu.Lock()
+	defer f.st.mu.Unlock()
 	return f.write("append", c, data, true)
 }
 
@@ -348,8 +390,8 @@ func (f *FS) MkdirAll(p string) error {
 	if err != nil {
 		return err
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.st.mu.Lock()
+	defer f.st.mu.Unlock()
 	r, err := f.resolve(c, true)
 	if err != nil {
 		return err
@@ -364,20 +406,20 @@ func (f *FS) Lstat(p string) (outside.FileInfo, error) {
 	if err != nil {
 		return outside.FileInfo{}, err
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.st.mu.Lock()
+	defer f.st.mu.Unlock()
 	r, err := f.lpath(c)
 	if err != nil {
 		return outside.FileInfo{}, err
 	}
-	if _, ok := f.links[r]; ok {
+	if _, ok := f.st.links[r]; ok {
 		return outside.FileInfo{Name: path.Base(c), IsSymlink: true}, nil
 	}
-	if data, ok := f.files[r]; ok {
-		return outside.FileInfo{Name: path.Base(c), Size: int64(len(data))}, nil
+	if data, ok := f.st.files[r]; ok {
+		return outside.FileInfo{Name: path.Base(c), Size: int64(len(data)), Mode: f.st.perms[r]}, nil
 	}
-	if f.dirs[r] {
-		return outside.FileInfo{Name: path.Base(c), IsDir: true}, nil
+	if f.st.dirs[r] {
+		return outside.FileInfo{Name: path.Base(c), IsDir: true, Mode: f.st.perms[r]}, nil
 	}
 	return outside.FileInfo{}, pathErr("lstat", c, fs.ErrNotExist)
 }
@@ -400,8 +442,8 @@ func (f *FS) Rename(from, to string) error {
 	if cf == "." || ct == "." {
 		return linkErr(cf, ct, errors.New("根は移せない"))
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.st.mu.Lock()
+	defer f.st.mu.Unlock()
 	rf, err := f.lpath(cf)
 	if err != nil {
 		return err
@@ -410,9 +452,9 @@ func (f *FS) Rename(from, to string) error {
 	if err != nil {
 		return err
 	}
-	data, isFile := f.files[rf]
-	target, isLink := f.links[rf]
-	if !isFile && !isLink && !f.dirs[rf] {
+	data, isFile := f.st.files[rf]
+	target, isLink := f.st.links[rf]
+	if !isFile && !isLink && !f.st.dirs[rf] {
 		return linkErr(cf, ct, fs.ErrNotExist)
 	}
 	if rf == rt {
@@ -423,27 +465,30 @@ func (f *FS) Rename(from, to string) error {
 		return linkErr(cf, ct, errors.New("dir を 自分の下へは移せない"))
 	}
 	parent := path.Dir(rt)
-	if _, ok := f.files[parent]; ok {
+	if _, ok := f.st.files[parent]; ok {
 		return linkErr(cf, ct, errors.New("移し先の親が dir ではない"))
 	}
-	if !f.dirs[parent] {
+	if !f.st.dirs[parent] {
 		return linkErr(cf, ct, fs.ErrNotExist)
 	}
-	if f.dirs[rt] {
+	if f.st.dirs[rt] {
 		return linkErr(cf, ct, errors.New("移し先に dir が在る"))
 	}
-	_, dstFile := f.files[rt]
-	_, dstLink := f.links[rt]
+	_, dstFile := f.st.files[rt]
+	_, dstLink := f.st.links[rt]
 	switch {
 	case isFile:
-		delete(f.files, rf)
-		delete(f.links, rt)
-		f.files[rt] = data
+		delete(f.st.files, rf)
+		delete(f.st.links, rt)
+		f.st.files[rt] = data
+		f.st.perms[rt] = f.st.perms[rf]
+		delete(f.st.perms, rf)
 		return nil
 	case isLink:
-		delete(f.links, rf)
-		delete(f.files, rt)
-		f.links[rt] = target
+		delete(f.st.links, rf)
+		delete(f.st.files, rt)
+		delete(f.st.perms, rt)
+		f.st.links[rt] = target
 		return nil
 	}
 	if dstFile || dstLink {
@@ -451,34 +496,44 @@ func (f *FS) Rename(from, to string) error {
 	}
 	moved := func(name string) string { return rt + strings.TrimPrefix(name, rf) }
 	files := map[string][]byte{}
-	for name, d := range f.files {
+	for name, d := range f.st.files {
 		if rule.Within(name, rf) {
 			files[moved(name)] = d
-			delete(f.files, name)
+			delete(f.st.files, name)
 		}
 	}
 	links := map[string]string{}
-	for name, tg := range f.links {
+	for name, tg := range f.st.links {
 		if rule.Within(name, rf) {
 			links[moved(name)] = tg
-			delete(f.links, name)
+			delete(f.st.links, name)
 		}
 	}
 	dirs := map[string]bool{}
-	for name := range f.dirs {
+	for name := range f.st.dirs {
 		if rule.Within(name, rf) {
 			dirs[moved(name)] = true
-			delete(f.dirs, name)
+			delete(f.st.dirs, name)
+		}
+	}
+	perms := map[string]fs.FileMode{}
+	for name, m := range f.st.perms {
+		if rule.Within(name, rf) {
+			perms[moved(name)] = m
+			delete(f.st.perms, name)
 		}
 	}
 	for name, d := range files {
-		f.files[name] = d
+		f.st.files[name] = d
 	}
 	for name, tg := range links {
-		f.links[name] = tg
+		f.st.links[name] = tg
 	}
 	for name := range dirs {
-		f.dirs[name] = true
+		f.st.dirs[name] = true
+	}
+	for name, m := range perms {
+		f.st.perms[name] = m
 	}
 	return nil
 }
@@ -493,8 +548,8 @@ func (f *FS) RemoveAll(p string) error {
 	if c == "." {
 		return pathErr("removeall", c, errors.New("根は消せない"))
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.st.mu.Lock()
+	defer f.st.mu.Unlock()
 	r, err := f.lpath(c)
 	if err != nil {
 		return err
@@ -502,19 +557,24 @@ func (f *FS) RemoveAll(p string) error {
 	if r == "." {
 		return pathErr("removeall", c, errors.New("根は消せない"))
 	}
-	for name := range f.files {
+	for name := range f.st.files {
 		if rule.Within(name, r) {
-			delete(f.files, name)
+			delete(f.st.files, name)
 		}
 	}
-	for name := range f.links {
+	for name := range f.st.links {
 		if rule.Within(name, r) {
-			delete(f.links, name)
+			delete(f.st.links, name)
 		}
 	}
-	for name := range f.dirs {
+	for name := range f.st.dirs {
 		if rule.Within(name, r) {
-			delete(f.dirs, name)
+			delete(f.st.dirs, name)
+		}
+	}
+	for name := range f.st.perms {
+		if rule.Within(name, r) {
+			delete(f.st.perms, name)
 		}
 	}
 	return nil
@@ -534,26 +594,26 @@ func (f *FS) Symlink(target, link string) error {
 	if target == "" {
 		return pathErr("symlink", c, errors.New("target が空"))
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.st.mu.Lock()
+	defer f.st.mu.Unlock()
 	r, err := f.lpath(c)
 	if err != nil {
 		return err
 	}
-	if _, ok := f.files[r]; ok {
+	if _, ok := f.st.files[r]; ok {
 		return pathErr("symlink", c, errors.New("link に file が在る"))
 	}
-	if f.dirs[r] {
+	if f.st.dirs[r] {
 		return pathErr("symlink", c, errors.New("link に dir が在る"))
 	}
 	parent := path.Dir(r)
-	if _, ok := f.files[parent]; ok {
+	if _, ok := f.st.files[parent]; ok {
 		return pathErr("symlink", c, errors.New("link の親が dir ではない"))
 	}
-	if !f.dirs[parent] {
+	if !f.st.dirs[parent] {
 		return pathErr("symlink", c, fs.ErrNotExist)
 	}
-	f.links[r] = target
+	f.st.links[r] = target
 	return nil
 }
 
@@ -564,16 +624,16 @@ func (f *FS) Readlink(p string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.st.mu.Lock()
+	defer f.st.mu.Unlock()
 	r, err := f.lpath(c)
 	if err != nil {
 		return "", err
 	}
-	if target, ok := f.links[r]; ok {
+	if target, ok := f.st.links[r]; ok {
 		return target, nil
 	}
-	if _, ok := f.files[r]; ok || f.dirs[r] {
+	if _, ok := f.st.files[r]; ok || f.st.dirs[r] {
 		return "", pathErr("readlink", c, errors.New("symlink ではない"))
 	}
 	return "", pathErr("readlink", c, fs.ErrNotExist)

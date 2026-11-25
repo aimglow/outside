@@ -44,7 +44,7 @@ func fsSymlinkContract(t *testing.T, f outside.FS, abs string) {
 	}
 	readlink("l", "t/a.txt")
 	read("l", "A")
-	if info, err := f.Stat("l"); err != nil || info != (outside.FileInfo{Name: "l", Size: 1}) {
+	if info, err := f.Stat("l"); err != nil || info != (outside.FileInfo{Name: "l", Size: 1, Mode: 0o644}) {
 		t.Errorf("Stat(l) = %+v, %v (辿った先を返す)", info, err)
 	}
 

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"io/fs"
 	"time"
 
 	"github.com/aimglow/outside/go/internal/rule"
@@ -70,9 +71,13 @@ type FileInfo struct {
 	IsDir bool
 	// IsSymlink は Lstat が symlink を辿らずに見た時だけ true (Stat は 辿った先を返す)。
 	IsSymlink bool
+	// Mode は 権限の bit (fs.FileMode の Perm の範囲)。Lstat が見た symlink は 0。
+	Mode fs.FileMode
 }
 
 // FS は 宣言した根の下の file を読む・書く・一覧する。
+// 新しく作る file と dir の権限は FS を作る時に決まる (NewFS = file 0644・dir 0755、NewPrivateFS = file 0600・dir 0700)。
+// 既に在る file を WriteFile・AppendFile しても 権限は変えない。
 // path は 根からの相対 (区切りは /)。根の外の path は ErrOutsideRoot。
 // 無い path は errors.Is(err, fs.ErrNotExist) で判る。
 type FS interface {

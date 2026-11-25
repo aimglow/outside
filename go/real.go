@@ -52,10 +52,26 @@ func NewEnv() Env { return realEnv{} }
 
 func (realEnv) Lookup(name string) (string, bool) { return os.LookupEnv(name) }
 
-type realFS struct{ root string }
+// realFS は root を根とする FS。filePerm・dirPerm は この FS が新しく作る file と dir の権限
+// (umask に依らず この値になるよう 作った物にだけ Chmod を当てる。既に在る物の権限は変えない)。
+type realFS struct {
+	root     string
+	filePerm fs.FileMode
+	dirPerm  fs.FileMode
+}
 
-// NewFS は root を根とする口を返す。root が dir として在らなければ 誤り。
+// NewFS は root を根とする口を返す。作る file は 0644・dir は 0755。root が dir として在らなければ 誤り。
 func NewFS(root string) (FS, error) {
+	return newRealFS(root, 0o644, 0o755)
+}
+
+// NewPrivateFS は root を根とする 秘密を置く口を返す。作る file は 0600・dir は 0700 (同じ機体の他の user に読ませない)。
+// root が dir として在らなければ 誤り。root 自身の権限は変えない。
+func NewPrivateFS(root string) (FS, error) {
+	return newRealFS(root, 0o600, 0o700)
+}
+
+func newRealFS(root string, filePerm, dirPerm fs.FileMode) (FS, error) {
 	info, err := os.Stat(root)
 	if err != nil {
 		return nil, fmt.Errorf("outside: FS の根が無い: %w", err)
@@ -63,7 +79,69 @@ func NewFS(root string) (FS, error) {
 	if !info.IsDir() {
 		return nil, fmt.Errorf("outside: FS の根が dir ではない: %s", root)
 	}
-	return realFS{root: root}, nil
+	return realFS{root: root, filePerm: filePerm, dirPerm: dirPerm}, nil
+}
+
+// mkdirAll は 整えた c と その親の dir を 無ければ作る。新しく作った dir にだけ dirPerm を当てる。
+// 途中の名前が dir 以外 (file・dir を指さない symlink) なら 誤り。symlink は 根の中で辿る (os.Root が止める)。
+func (f realFS) mkdirAll(r *os.Root, c string) error {
+	if c == "." {
+		return nil
+	}
+	parts := strings.Split(c, "/")
+	for i := range parts {
+		d := strings.Join(parts[:i+1], "/")
+		err := r.Mkdir(d, f.dirPerm)
+		if err == nil {
+			if err := r.Chmod(d, f.dirPerm); err != nil {
+				return err
+			}
+			continue
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			return err
+		}
+		info, serr := r.Stat(d)
+		if serr != nil {
+			return serr
+		}
+		if !info.IsDir() {
+			return &fs.PathError{Op: "mkdir", Path: d, Err: errors.New("dir ではない物が在る")}
+		}
+	}
+	return nil
+}
+
+// openForWrite は c を書くために開く。無ければ filePerm で作り 権限を当てる (新しく作った時だけ)。
+// flag は O_WRONLY に足す物 (O_TRUNC か O_APPEND)。c が 先の無い symlink なら 先を新しく作る。
+func (f realFS) openForWrite(r *os.Root, c string, flag int) (*os.File, error) {
+	file, err := r.OpenFile(c, os.O_WRONLY|os.O_CREATE|os.O_EXCL|flag, f.filePerm)
+	if err == nil {
+		return f.fixNew(file)
+	}
+	if !errors.Is(err, fs.ErrExist) {
+		return nil, err
+	}
+	// 何かが在る (file・dir・symlink)。在る file は 権限を変えずに開く。
+	file, err = r.OpenFile(c, os.O_WRONLY|flag, 0)
+	if err == nil || !errors.Is(err, fs.ErrNotExist) {
+		return file, err
+	}
+	// 先の無い symlink: 辿った先を作る (先は 新しい file)。
+	file, err = r.OpenFile(c, os.O_WRONLY|os.O_CREATE|flag, f.filePerm)
+	if err != nil {
+		return nil, err
+	}
+	return f.fixNew(file)
+}
+
+// fixNew は 新しく作った file に filePerm を当てる (umask で削られた bit を戻し 決めた権限にする)。
+func (f realFS) fixNew(file *os.File) (*os.File, error) {
+	if err := file.Chmod(f.filePerm); err != nil {
+		file.Close()
+		return nil, err
+	}
+	return file, nil
 }
 
 // open は path を確かめて 根を開く。symlink で根の外へ出る path は os.Root が止める。
@@ -94,12 +172,18 @@ func (f realFS) WriteFile(p string, data []byte) error {
 		return err
 	}
 	defer r.Close()
-	if dir := path.Dir(c); dir != "." {
-		if err := r.MkdirAll(dir, 0o755); err != nil {
-			return err
-		}
+	if err := f.mkdirAll(r, path.Dir(c)); err != nil {
+		return err
 	}
-	return r.WriteFile(c, data, 0o644)
+	file, err := f.openForWrite(r, c, os.O_TRUNC)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(data); err != nil {
+		file.Close()
+		return err
+	}
+	return file.Close()
 }
 
 func (f realFS) ReadDir(p string) ([]DirEntry, error) {
@@ -131,9 +215,9 @@ func (f realFS) Stat(p string) (FileInfo, error) {
 		return FileInfo{}, err
 	}
 	if info.IsDir() {
-		return FileInfo{Name: path.Base(c), IsDir: true}, nil
+		return FileInfo{Name: path.Base(c), IsDir: true, Mode: info.Mode().Perm()}, nil
 	}
-	return FileInfo{Name: path.Base(c), Size: info.Size()}, nil
+	return FileInfo{Name: path.Base(c), Size: info.Size(), Mode: info.Mode().Perm()}, nil
 }
 
 func (f realFS) Remove(p string) error {
@@ -177,12 +261,10 @@ func (f realFS) AppendFile(p string, data []byte) error {
 		return err
 	}
 	defer r.Close()
-	if dir := path.Dir(c); dir != "." {
-		if err := r.MkdirAll(dir, 0o755); err != nil {
-			return err
-		}
+	if err := f.mkdirAll(r, path.Dir(c)); err != nil {
+		return err
 	}
-	file, err := r.OpenFile(c, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+	file, err := f.openForWrite(r, c, os.O_APPEND)
 	if err != nil {
 		return err
 	}
@@ -199,7 +281,7 @@ func (f realFS) MkdirAll(p string) error {
 		return err
 	}
 	defer r.Close()
-	return r.MkdirAll(c, 0o755)
+	return f.mkdirAll(r, c)
 }
 
 func (f realFS) Lstat(p string) (FileInfo, error) {
@@ -214,11 +296,12 @@ func (f realFS) Lstat(p string) (FileInfo, error) {
 	}
 	switch {
 	case info.Mode()&fs.ModeSymlink != 0:
+		// symlink の権限の bit は OS ごとに違い 使われない ∴ 0。
 		return FileInfo{Name: path.Base(c), IsSymlink: true}, nil
 	case info.IsDir():
-		return FileInfo{Name: path.Base(c), IsDir: true}, nil
+		return FileInfo{Name: path.Base(c), IsDir: true, Mode: info.Mode().Perm()}, nil
 	}
-	return FileInfo{Name: path.Base(c), Size: info.Size()}, nil
+	return FileInfo{Name: path.Base(c), Size: info.Size(), Mode: info.Mode().Perm()}, nil
 }
 
 func (f realFS) Rename(from, to string) error {

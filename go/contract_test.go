@@ -135,10 +135,10 @@ func fsContract(t *testing.T, f outside.FS, abs string) {
 	if data, err := f.ReadFile("./a/../a/b.txt"); err != nil || string(data) != "hello" {
 		t.Errorf("根の中に収まる path の ReadFile = %q, %v", data, err)
 	}
-	if info, err := f.Stat("a/b.txt"); err != nil || info != (outside.FileInfo{Name: "b.txt", Size: 5}) {
+	if info, err := f.Stat("a/b.txt"); err != nil || info != (outside.FileInfo{Name: "b.txt", Size: 5, Mode: 0o644}) {
 		t.Errorf("Stat(file) = %+v, %v", info, err)
 	}
-	if info, err := f.Stat("a"); err != nil || info != (outside.FileInfo{Name: "a", IsDir: true}) {
+	if info, err := f.Stat("a"); err != nil || info != (outside.FileInfo{Name: "a", IsDir: true, Mode: 0o755}) {
 		t.Errorf("Stat(dir) = %+v, %v", info, err)
 	}
 	if got, err := f.ReadDir("a"); err != nil ||
@@ -742,10 +742,10 @@ func fsMoreContract(t *testing.T, f outside.FS, abs string) {
 	}
 
 	// Lstat: symlink でない物は Stat と同じ。
-	if info, err := f.Lstat("a/b.txt"); err != nil || info != (outside.FileInfo{Name: "b.txt", Size: 5}) {
+	if info, err := f.Lstat("a/b.txt"); err != nil || info != (outside.FileInfo{Name: "b.txt", Size: 5, Mode: 0o644}) {
 		t.Errorf("Lstat(file) = %+v, %v", info, err)
 	}
-	if info, err := f.Lstat("m"); err != nil || info != (outside.FileInfo{Name: "m", IsDir: true}) {
+	if info, err := f.Lstat("m"); err != nil || info != (outside.FileInfo{Name: "m", IsDir: true, Mode: 0o755}) {
 		t.Errorf("Lstat(dir) = %+v, %v", info, err)
 	}
 	if _, err := f.Lstat("nope"); !errors.Is(err, fs.ErrNotExist) {
@@ -885,6 +885,10 @@ func TestRealFS_TC_OUT_FS_MORE_Symlink(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "target.txt"), []byte("abc"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// umask に依らず 権限を決める (Stat の Mode を比べるため)。
+	if err := os.Chmod(filepath.Join(root, "target.txt"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Symlink("target.txt", filepath.Join(root, "in")); err != nil {
 		t.Fatal(err)
 	}
@@ -900,7 +904,7 @@ func TestRealFS_TC_OUT_FS_MORE_Symlink(t *testing.T) {
 			t.Errorf("Lstat(%s) = %+v, %v", name, info, err)
 		}
 	}
-	if info, err := f.Stat("in"); err != nil || info != (outside.FileInfo{Name: "in", Size: 3}) {
+	if info, err := f.Stat("in"); err != nil || info != (outside.FileInfo{Name: "in", Size: 3, Mode: 0o644}) {
 		t.Errorf("Stat(in) = %+v, %v (辿った先を返す)", info, err)
 	}
 	if rc, err := f.Open("out"); err == nil {
