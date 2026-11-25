@@ -30,6 +30,13 @@ cases:
     input: 書いた file を Open で読む / AppendFile 2 回 / MkdirAll の入れ子 / Rename (根の中・根の外) / RemoveAll (dir・無い path・根) / Lstat (real は symlink を自分で作る)
     expect: Open で書いた中身が読める・無い path は fs.ErrNotExist。AppendFile は 足した順に並ぶ。Rename の根の外は 誤り。RemoveAll は 中身ごと消え 無い path は 誤りでなく 根は 誤り。Lstat は symlink を IsSymlink で名乗る (mock の FS の symlink は TC-OUT-FS-SYMLINK で作る)。
 
+  - id: TC-OUT-FS-PERM
+    requirement: REQ-OUT-CONTRACT
+    behavior: NewFS の FS が作る file は 0644・dir は 0755、NewPrivateFS の FS が作る file は 0600・dir は 0700。Stat の Mode で読める。既に在る file への書き込みは 権限を変えない。
+    input: 両方の FS で WriteFile (親の dir も作る)・AppendFile (無い file と 在る file)・MkdirAll / 既定の FS で作った file を private の FS で WriteFile
+    mocks: real は test が作った dir だけを根にし umask の影響を受けない形で確かめる (作った後に Stat の Mode を見る)
+    expect: real と mock で 同じ Mode。private の FS で作った物は 他の user の bit が 0。
+
   - id: TC-OUT-FS-SYMLINK
     requirement: REQ-OUT-CONTRACT
     behavior: Symlink・Readlink が real と mock で同じ振る舞いをする。
