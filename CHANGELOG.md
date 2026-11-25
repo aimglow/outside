@@ -218,3 +218,11 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 
 - go: Proc の `Cmd.Unset []string` を足した (子へ渡さない 親の環境変数の名)。子の環境変数 = 親の環境変数から Unset の名を外し Env を足した物 (Unset を先に当てる = Env で同じ名を足せば Env が効く)。外の program の向き先を変える変数を 子へ継がせない時に使う。mock は Unset を Cmds() に記録する (親の環境変数は読まない)。kifune の頼み。
 - 利用する側がやる事: 足すだけ (Cmd に field が増えた。Cmd を位置で組む所は無いはず)。継いだ変数を外したい所は Unset に名を書く。
+
+## next/v0.3.0 (2026-11-25)
+
+- 足した (next だけ。angular・flutter は持たない): Node の口 FS と Proc。名前と意味は go の FS・Proc に揃えた (amatelas の頼み)。
+  - FS: `readFile` (Uint8Array)・`writeFile` (Uint8Array か string、親の dir を作る)・`readDir` ({name, isDir} の名前の順)・`stat` ({name, size, isDir})・`remove` (file か空の dir)・`mkdirAll`。path は 宣言した根からの相対。根の外は `EOUTSIDEROOT`、無い path は `ENOENT` (stat も)。real = `createRealFS(root)` (root は絶対 path)、mock = `createMockFS(tree)` (相対 path → 中身、空の dir は末尾 /)。Node には os.Root に当たる口が無いので 確かめてから操作するまでの間の symlink の差し替えは防げない (go の FS より弱い)。
+  - Proc: `run({name, args, dir?, env?, unset?, stdin?, signal?})` → `{exitCode, stdout, stderr}`。0 以外の exit は 結果で返る (reject しない)。宣言に無い名前は `EUNDECLARED`。shell を通さない。abort は `ABORT_ERR`。real = `createRealProc(programs)` (path が空の名前は 子の環境変数の PATH から探す)、mock = `createMockProc(programs)` (calls に name・args・dir・env・unset・stdin)。
+  - set: `OutsideSet` に `fs`・`proc`。`createRealSet` の options に `fsRoot`・`programs`、`createMockSet` に `tree`・`programs`。宣言しなければ 使った時に `ENOROOT`・`EUNDECLARED` で reject = 今の呼び手は壊れない。
+- 利用する側がやる事: `./scripts/sync-outside.sh next next/v0.3.0`。node:fs・node:child_process を直に触る所は `set.fs`・`set.proc` へ (real は `createRealSet({ fsRoot, programs })`、test は `createMockSet({ startMs, tree, programs })`)。`OutsideSet` を手で組む所は `fs`・`proc` を足す。誤りは `code` で分け 子の結果は `exitCode` を見る。

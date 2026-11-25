@@ -207,7 +207,7 @@ ports:
         path は 根からの相対 (区切りは /)。絶対 path と 根の外へ出る path は 誤り (読まない)。無い path は code = 'ENOENT' の誤りで reject。
         readFile は Uint8Array。writeFile は Uint8Array か string (UTF-8) を書き 親の dir が無ければ作る。readDir は 名前の順の {name, isDir}。stat は {name, size, isDir}。
         remove は file か 空の dir を消す (根は誤り)。mkdirAll は 入れ子の dir を作る (在れば何もしない)。
-        real は createRealFS(root) (node:fs/promises。symlink で根の外へ出る path も誤り)。createRealSet に fsRoot を渡さなければ 使った時に 根が宣言されていないと名乗って reject。
+        real は createRealFS(root) (node:fs/promises。symlink で根の外へ出る path も誤り。Node には os.Root に当たる口が無い = 確かめてから操作するまでの間の symlink の差し替えは防げない (Go の FS より弱い))。createRealSet に fsRoot を渡さなければ 使った時に 根が宣言されていないと名乗って reject。
       mock: >
         memory の上の木。createMockFS(tree) の tree は 相対 path → 中身 (string か Uint8Array) の表 (空の dir は 末尾 / の path)。絶対 path と 根の外の宣言は 誤り。
         disk に木を作らない。呼び出しを calls に残す。
@@ -217,7 +217,7 @@ ports:
       rule: >
         run(cmd) の cmd = {name, args, dir?, env?, unset?, stdin?, signal?}。結果 = {exitCode, stdout, stderr} (stdout・stderr は Uint8Array)。0 以外の exitCode も 誤りでなく 結果で返る。
         宣言に無い name は 誤り。子の環境変数 = 親の環境変数から unset を外し env を足した物。stdin は 子の標準入力 (秘密を disk にも argv にも載せない)。signal が abort したら 子を止めて reject。
-        real は createRealProc(programs) (programs = 名前 → 実行 file の path、空なら PATH から探す。node:child_process の execFile 系。shell を通さない)。createRealSet に programs を渡さなければ 全ての name が宣言に無い誤り。
+        real は createRealProc(programs) (programs = 名前 → 実行 file の path、空なら 子の環境変数の PATH から探す。node:child_process の execFile 系。shell を通さない)。createRealSet に programs を渡さなければ 全ての name が宣言に無い誤り。
       mock: >
         createMockProc(programs) の programs = 名前 → 結果を決める関数 (cmd を受け {exitCode, stdout, stderr} か {error})。宣言に無い名前は reject。
         起こされた cmd (name・args・dir・env・unset・stdin) を calls に残す。親の環境変数と実の process を使わない。
