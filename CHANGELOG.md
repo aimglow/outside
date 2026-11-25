@@ -238,3 +238,8 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 - go: `outside.NewPrivateFS(root)` を足した。この FS が作る file は 0600・dir は 0700 (NewFS は 今までどおり 0644・0755)。umask に依らず決めた権限で作る (作れた時だけ 開いた file / 作った dir に chmod)。既に在る file への WriteFile・AppendFile は 権限を変えない。呼び出しごとに権限を渡す口は持たない (渡し忘れで秘密が 0644 で書かれる形を作らない)。mock = `outsidemock.NewPrivateFS(tree)` (同じ木を別の権限で触る `PrivateView()`・`DefaultView()` も)。ccark #9969 の頼み (秘密を置く台帳を FS へ載せる)。
 - go: `FileInfo.Mode` (権限の bit) を足した。real の Stat・Lstat は 実の権限、mock は 記録した権限 (既定 file 0644・dir 0755)。Lstat が見た symlink は 0。`IOFS(FS)` の Mode も これを返す。
 - 利用する側がやる事: FileInfo を struct の値で比べる test は Mode を足すか 比べる field を絞る。FileInfo を位置で並べて作る code は直す。秘密 (鍵・台帳) は NewPrivateFS で開く。0644 で作った既存の file は 権限が変わらない = private に移すなら作り直す。umask を前提にした処理は見直す。
+
+## go/v0.13.1 (2026-11-25)
+
+- go (test の直しだけ): TC-OUT-CLOCK-TIMER の real の test が 負荷の下で時々落ちた。Reset の後に測った時刻を 新しい期限の下限にしていたため (Reset から Now までの間だけ 下限が先へずれる)。下限を Reset の前に測る形にした (-race で 30 回続けて通る)。口と振る舞いは変えない。
+- 利用する側がやる事: 無い (部品の test は取り込まない)。

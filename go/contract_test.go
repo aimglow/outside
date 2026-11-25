@@ -622,13 +622,14 @@ func timerContract(t *testing.T, c outside.Clock, advance func(time.Duration), u
 		t.Error("止めた Timer の 2 度目の Stop が true")
 	}
 	// Reset: 済んだ Timer は false、動いている Timer は true。どちらも 新しい期限で発火する。
+	// before は Reset の前に測る (後で測ると Reset から Now までの間だけ 期限の下限が先へずれ 負荷の下で 正しい発火を誤りと読む)。
+	before := c.Now()
 	if t1.Reset(unit) {
 		t.Error("発火済みの Timer の Reset が true")
 	}
 	if !pending.Reset(unit) {
 		t.Error("動いている Timer の Reset が false")
 	}
-	before := c.Now()
 	advance(3 * unit)
 	if v := recv(t1.C(), "Reset した 済みの Timer"); v.Before(before.Add(unit)) {
 		t.Errorf("Reset した Timer の時刻 %v が 新しい期限より前", v)
