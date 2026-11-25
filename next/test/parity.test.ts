@@ -1,5 +1,5 @@
 // port と method の名前の組を確かめる。
-// 期待の表は 設計書の ports.frontend_and_mobile を写した物 (設計書の file は test から読まない)。
+// 期待の表は 設計書の ports.frontend_and_mobile と ports.next_only を写した物 (設計書の file は test から読まない)。
 
 import { describe, expect, it } from 'vitest';
 import { createRealSet } from '../src/index';
@@ -12,6 +12,9 @@ const DESIGN_PORTS: Record<string, string[]> = {
   config: ['get'],
   idGen: ['newId'],
   random: ['read'],
+  // next_only (部品 next だけ)。
+  fs: ['readFile', 'writeFile', 'readDir', 'stat', 'remove', 'mkdirAll'],
+  proc: ['run'],
 };
 
 // port が持つ関数の名前の一覧。

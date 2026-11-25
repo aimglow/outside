@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest';
 import {
   createMockClock,
   createMockConfig,
+  createMockFS,
   createMockHttp,
+  createMockProc,
   createMockIdGen,
   createMockRandom,
   createMockSet,
@@ -257,8 +259,148 @@ describe('TC-OUT-RANDOM-FE mock の Random', () => {
   });
 });
 
+describe('TC-OUT-NEXT-FS mock の FS', () => {
+  it('根の外・絶対 path・空の path の木の宣言は EOUTSIDEROOT で throw する', () => {
+    for (const key of ['../x', '/abs', '/', 'a/../../x', '\\x', 'C:/x', '']) {
+      expect(() => createMockFS({ [key]: 'x' }), key).toThrow(
+        expect.objectContaining({ code: 'EOUTSIDEROOT' }),
+      );
+    }
+  });
+
+  it('file と dir の食い違いの宣言は throw する', () => {
+    expect(() => createMockFS({ a: 'x', 'a/b': 'y' })).toThrow('a');
+    expect(() => createMockFS({ 'a/b': 'y', a: 'x' })).toThrow('a');
+    expect(() => createMockFS({ a: 'x', 'a/': '' })).toThrow('a');
+    expect(() => createMockFS({ 'a/': '', a: 'x' })).toThrow('a');
+    expect(() => createMockFS({ '.': 'x' })).toThrow();
+  });
+
+  it('呼ばれた method と 渡された path を 呼ばれた順に残す (誤りの呼び出しも)', async () => {
+    const fs = createMockFS({ 'a.txt': 'a' });
+    await fs.readFile('a.txt');
+    await fs.writeFile('b/c.txt', 'c');
+    await fs.readDir('.');
+    await fs.stat('b');
+    await fs.mkdirAll('d/e');
+    await fs.remove('a.txt');
+    await fs.readFile('../x').catch(() => undefined);
+    expect(fs.calls).toEqual([
+      { method: 'readFile', path: 'a.txt' },
+      { method: 'writeFile', path: 'b/c.txt' },
+      { method: 'readDir', path: '.' },
+      { method: 'stat', path: 'b' },
+      { method: 'mkdirAll', path: 'd/e' },
+      { method: 'remove', path: 'a.txt' },
+      { method: 'readFile', path: '../x' },
+    ]);
+  });
+
+  it('木の宣言に渡した byte 列と 書いた byte 列を 写して持つ (後から変えても 中身は変わらない)', async () => {
+    const declared = new Uint8Array([1, 2]);
+    const written = new Uint8Array([3, 4]);
+    const fs = createMockFS({ 'd.bin': declared });
+    await fs.writeFile('w.bin', written);
+    declared[0] = 0;
+    written[0] = 0;
+    expect(Array.from(await fs.readFile('d.bin'))).toEqual([1, 2]);
+    expect(Array.from(await fs.readFile('w.bin'))).toEqual([3, 4]);
+  });
+
+  it('作るたびに 渡した木から始まる', async () => {
+    const tree = { 'a.txt': 'a' };
+    await createMockFS(tree).writeFile('b.txt', 'b');
+    expect(await createMockFS(tree).readDir('.')).toEqual([{ name: 'a.txt', isDir: false }]);
+  });
+});
+
+describe('TC-OUT-NEXT-PROC mock の Proc', () => {
+  it('起こされた cmd の name・args・dir・env・unset・stdin (byte 列) を残す。宣言に無い名前も残る', async () => {
+    const proc = createMockProc({ tool: () => ({}) });
+    await proc.run({
+      name: 'tool',
+      args: ['a', 'b'],
+      dir: 'work',
+      env: { K: 'v' },
+      unset: ['SECRET'],
+      stdin: 'pw',
+    });
+    await proc.run({ name: 'tool', args: [] });
+    await proc.run({ name: 'other', args: ['x'] }).catch(() => undefined);
+    expect(proc.calls).toEqual([
+      {
+        name: 'tool',
+        args: ['a', 'b'],
+        dir: 'work',
+        env: { K: 'v' },
+        unset: ['SECRET'],
+        stdin: new TextEncoder().encode('pw'),
+      },
+      { name: 'tool', args: [] },
+      { name: 'other', args: ['x'] },
+    ]);
+  });
+
+  it('結果の既定は exitCode 0・空の stdout と stderr。string は UTF-8 の byte 列', async () => {
+    const proc = createMockProc({
+      empty: () => ({}),
+      text: () => ({ exitCode: 2, stdout: 'é', stderr: new Uint8Array([7]) }),
+    });
+    expect(await proc.run({ name: 'empty', args: [] })).toEqual({
+      exitCode: 0,
+      stdout: new Uint8Array(0),
+      stderr: new Uint8Array(0),
+    });
+    expect(await proc.run({ name: 'text', args: [] })).toEqual({
+      exitCode: 2,
+      stdout: new TextEncoder().encode('é'),
+      stderr: new Uint8Array([7]),
+    });
+  });
+
+  it('{error} と 関数が投げた誤りは reject する', async () => {
+    const proc = createMockProc({
+      down: () => ({ error: 'spawn failed' }),
+      broken: () => {
+        throw new Error('broken program');
+      },
+      rejects: () => Promise.reject(new Error('async broken')),
+    });
+    await expect(proc.run({ name: 'down', args: [] })).rejects.toThrow('spawn failed');
+    await expect(proc.run({ name: 'broken', args: [] })).rejects.toThrow('broken program');
+    await expect(proc.run({ name: 'rejects', args: [] })).rejects.toThrow('async broken');
+  });
+
+  it('abort 済みの signal では 関数を呼ばない', async () => {
+    let called = 0;
+    const proc = createMockProc({
+      tool: () => {
+        called += 1;
+        return {};
+      },
+    });
+    await expect(proc.run({ name: 'tool', args: [], signal: AbortSignal.abort() })).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    expect(called).toBe(0);
+  });
+});
+
 describe('REQ-OUT-MOCK mock の set', () => {
-  it('渡した値から 6 つの mock を作る', async () => {
+  it('tree と programs を渡すと fs と proc に使う。渡さなければ 空の根と 宣言の無い Proc', async () => {
+    const set = createMockSet({
+      startMs: START,
+      tree: { 'a.txt': 'a' },
+      programs: { tool: () => ({ stdout: 'ok' }) },
+    });
+    expect(new TextDecoder().decode(await set.fs.readFile('a.txt'))).toBe('a');
+    expect(new TextDecoder().decode((await set.proc.run({ name: 'tool', args: [] })).stdout)).toBe('ok');
+    const bare = createMockSet({ startMs: START });
+    expect(await bare.fs.readDir('.')).toEqual([]);
+    await expect(bare.proc.run({ name: 'tool', args: [] })).rejects.toMatchObject({ code: 'EUNDECLARED' });
+  });
+
+  it('渡した値から 8 つの mock を作る', async () => {
     const set = createMockSet({
       startMs: START,
       routes: [{ method: 'GET', url: 'https://api.example.test/', response: { status: 204 } }],

@@ -1,17 +1,23 @@
 // real だけが持つ振る舞い (外へ渡す内容・外が無い時の誤り)。
 // 外の物は test が渡すか test が global を差し替える。機体の物は読まない。
 
+import { existsSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createRealClock,
   createRealConfig,
+  createRealFS,
   createRealHttp,
+  createRealProc,
   createRealIdGen,
   createRealRandom,
   createRealSet,
   createRealStorage,
   type FetchLike,
 } from '../src/index';
+import { writeScripts } from './programs';
+import { testDir } from './workdir';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -194,6 +200,195 @@ describe('REQ-OUT-INJECT real の set', () => {
     vi.stubGlobal('process', undefined);
     vi.stubGlobal('crypto', undefined);
     const set = createRealSet();
-    expect(Object.keys(set).sort()).toEqual(['clock', 'config', 'http', 'idGen', 'random', 'storage']);
+    expect(Object.keys(set).sort()).toEqual(['clock', 'config', 'fs', 'http', 'idGen', 'proc', 'random', 'storage']);
+  });
+});
+
+/** reject の誤りの code を返す (reject しなければ 'resolved')。 */
+async function codeOf(p: Promise<unknown>): Promise<string> {
+  try {
+    await p;
+    return 'resolved';
+  } catch (err) {
+    return String((err as { code?: unknown }).code);
+  }
+}
+
+/** reject の誤りを返す (reject しなければ throw する)。 */
+async function errorOf(p: Promise<unknown>): Promise<Error & { code?: string }> {
+  try {
+    await p;
+  } catch (err) {
+    return err as Error & { code?: string };
+  }
+  throw new Error('resolved');
+}
+
+describe('TC-OUT-NEXT-FS real の FS (symlink と 根)', () => {
+  // 根と 根の外 (別の test の dir) を作り 根の中に symlink を置く。
+  function setup() {
+    const root = realpathSync(testDir());
+    const away = realpathSync(testDir());
+    writeFileSync(join(away, 'secret.txt'), 'secret');
+    mkdirSync(join(root, 'in/sub'), { recursive: true });
+    writeFileSync(join(root, 'in/sub/f.txt'), 'inside');
+    symlinkSync('sub/f.txt', join(root, 'in/rel-file'));
+    symlinkSync(join(root, 'in/sub'), join(root, 'abs-dir'));
+    symlinkSync('../../in', join(root, 'in/sub/up'));
+    symlinkSync(join(away, 'secret.txt'), join(root, 'out-abs'));
+    symlinkSync(relative(root, join(away, 'secret.txt')), join(root, 'out-rel'));
+    symlinkSync(away, join(root, 'dir-out'));
+    symlinkSync(join(away, 'new.txt'), join(root, 'dangling-out'));
+    symlinkSync('loop', join(root, 'loop'));
+    return { root, away, fs: createRealFS(root) };
+  }
+
+  it('根の中に解ける symlink は辿る (相対・絶対・.. を含む target)', async () => {
+    const { fs } = setup();
+    expect(new TextDecoder().decode(await fs.readFile('in/rel-file'))).toBe('inside');
+    expect(await fs.readDir('abs-dir')).toEqual([
+      { name: 'f.txt', isDir: false },
+      { name: 'up', isDir: false },
+    ]);
+    expect(await fs.stat('in/sub/up/sub/f.txt')).toEqual({ name: 'f.txt', size: 6, isDir: false });
+    await fs.writeFile('abs-dir/new.txt', 'n');
+    expect(new TextDecoder().decode(await fs.readFile('in/sub/new.txt'))).toBe('n');
+  });
+
+  it('根の外へ出る symlink は どの method も EOUTSIDEROOT で 根の外を触らない', async () => {
+    const { fs, away } = setup();
+    expect(await codeOf(fs.readFile('out-abs'))).toBe('EOUTSIDEROOT');
+    expect(await codeOf(fs.readFile('out-rel'))).toBe('EOUTSIDEROOT');
+    expect(await codeOf(fs.stat('out-rel'))).toBe('EOUTSIDEROOT');
+    expect(await codeOf(fs.readDir('dir-out'))).toBe('EOUTSIDEROOT');
+    expect(await codeOf(fs.readFile('dir-out/secret.txt'))).toBe('EOUTSIDEROOT');
+    expect(await codeOf(fs.writeFile('dir-out/new.txt', 'x'))).toBe('EOUTSIDEROOT');
+    expect(await codeOf(fs.writeFile('dangling-out', 'x'))).toBe('EOUTSIDEROOT');
+    expect(await codeOf(fs.writeFile('out-abs', 'x'))).toBe('EOUTSIDEROOT');
+    expect(await codeOf(fs.mkdirAll('dir-out/sub'))).toBe('EOUTSIDEROOT');
+    expect(await codeOf(fs.remove('dir-out/secret.txt'))).toBe('EOUTSIDEROOT');
+    expect(existsSync(join(away, 'new.txt'))).toBe(false);
+    expect(existsSync(join(away, 'sub'))).toBe(false);
+    expect(new TextDecoder().decode(await import('node:fs/promises').then((m) => m.readFile(join(away, 'secret.txt'))))).toBe('secret');
+  });
+
+  it('remove は 最後の名前の symlink を辿らず link だけを消す', async () => {
+    const { fs, root, away } = setup();
+    await fs.remove('out-abs');
+    await fs.remove('dir-out');
+    expect(existsSync(join(root, 'out-abs'))).toBe(false);
+    expect(existsSync(join(root, 'dir-out'))).toBe(false);
+    expect(existsSync(join(away, 'secret.txt'))).toBe(true);
+  });
+
+  it('自分を指す symlink は ELOOP', async () => {
+    const { fs } = setup();
+    expect(await codeOf(fs.readFile('loop'))).toBe('ELOOP');
+  });
+
+  it('根は絶対 path でなければ 作る時に throw する。無い根は 使う時に ENOENT', async () => {
+    expect(() => createRealFS('relative/root')).toThrow('absolute');
+    const fs = createRealFS(join(testDir(), 'missing-root'));
+    expect(await codeOf(fs.readDir('.'))).toBe('ENOENT');
+  });
+
+  it('誤りの文は 根の外の絶対 path を名乗らない (相対 path で名乗る)', async () => {
+    const root = realpathSync(testDir());
+    const err = await errorOf(createRealFS(root).readFile('a/missing.txt'));
+    expect(err.message).toContain('a/missing.txt');
+    expect(err.message).not.toContain(root);
+  });
+});
+
+describe('REQ-OUT-INJECT real の set の FS と Proc', () => {
+  it('fsRoot を渡さなければ fs は 使った時に 根が宣言されていないと名乗って ENOROOT で reject する', async () => {
+    const set = createRealSet();
+    for (const run of [
+      () => set.fs.readFile('a'),
+      () => set.fs.writeFile('a', 'x'),
+      () => set.fs.readDir('.'),
+      () => set.fs.stat('a'),
+      () => set.fs.remove('a'),
+      () => set.fs.mkdirAll('a'),
+    ]) {
+      await expect(run()).rejects.toMatchObject({ code: 'ENOROOT', message: expect.stringContaining('not declared') });
+    }
+  });
+
+  it('fsRoot を渡すと その根の FS', async () => {
+    const root = testDir();
+    writeFileSync(join(root, 'a.txt'), 'a');
+    const set = createRealSet({ fsRoot: root });
+    expect(new TextDecoder().decode(await set.fs.readFile('a.txt'))).toBe('a');
+  });
+
+  it('programs を渡さなければ proc は 全ての名前が EUNDECLARED。渡すと その名前を起こす', async () => {
+    await expect(createRealSet().proc.run({ name: 'node', args: [] })).rejects.toMatchObject({ code: 'EUNDECLARED' });
+    const scripts = writeScripts(testDir());
+    const res = await createRealSet({ programs: { node: process.execPath } }).proc.run({
+      name: 'node',
+      args: [scripts.echo, 'set'],
+    });
+    expect(new TextDecoder().decode(res.stdout)).toBe('set\n');
+  });
+});
+
+describe('TC-OUT-NEXT-PROC real の Proc (実の子 process)', () => {
+  it('宣言の path に program が無ければ 名前を名乗って ENOENT で reject する', async () => {
+    const missing = join(testDir(), 'no-such-program');
+    const err = await errorOf(createRealProc({ tool: missing }).run({ name: 'tool', args: [] }));
+    expect(err.code).toBe('ENOENT');
+    expect(err.message).toContain('tool');
+  });
+
+  it('空の path は 子の環境変数の PATH から探す', async () => {
+    const scripts = writeScripts(testDir());
+    const res = await createRealProc({ node: '' }).run({
+      name: 'node',
+      args: [scripts.echo, 'from-path'],
+      env: { PATH: dirname(process.execPath) },
+    });
+    expect(new TextDecoder().decode(res.stdout)).toBe('from-path\n');
+  });
+
+  it('走っている子を abort で止める (子は居なくなる)', async () => {
+    const dir = testDir();
+    const scripts = writeScripts(dir);
+    const marker = join(dir, 'started');
+    const controller = new AbortController();
+    const run = createRealProc({ node: process.execPath }).run({
+      name: 'node',
+      args: [scripts.hang, marker],
+      signal: controller.signal,
+    });
+    // 子が起きた印 (pid を書いた file) を待つ。上限は 回数で切る (時計を読まない)。
+    for (let i = 0; i < 1000 && !existsSync(marker); i += 1) {
+      await new Promise((done) => setTimeout(done, 5));
+    }
+    expect(existsSync(marker)).toBe(true);
+    const pid = Number(await import('node:fs/promises').then((m) => m.readFile(marker, 'utf8')));
+    controller.abort();
+    await expect(run).rejects.toMatchObject({ name: 'AbortError', code: 'ABORT_ERR' });
+    const alive = (): boolean => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    for (let i = 0; i < 1000 && alive(); i += 1) {
+      await new Promise((done) => setTimeout(done, 5));
+    }
+    expect(alive()).toBe(false);
+  });
+
+  it('子が signal で終わった時は 名乗って reject する (exitCode が無い)', async () => {
+    const dir = testDir();
+    const script = join(dir, 'self-kill.cjs');
+    writeFileSync(script, "process.kill(process.pid, 'SIGKILL');\n");
+    await expect(
+      createRealProc({ node: process.execPath }).run({ name: 'node', args: [script] }),
+    ).rejects.toMatchObject({ code: 'ESIGNAL', message: expect.stringContaining('SIGKILL') });
   });
 });

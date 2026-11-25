@@ -1,10 +1,14 @@
 // 契約を real と mock の両方に掛ける。
 // real には test が作った物だけを渡す (機体の保存・通信・環境変数を触らない)。
 
+import { realpathSync } from 'node:fs';
+import { afterEach, vi } from 'vitest';
 import {
   createRealClock,
   createRealConfig,
+  createRealFS,
   createRealHttp,
+  createRealProc,
   createRealIdGen,
   createRealRandom,
   createRealStorage,
@@ -14,7 +18,9 @@ import {
 import {
   createMockClock,
   createMockConfig,
+  createMockFS,
   createMockHttp,
+  createMockProc,
   createMockIdGen,
   createMockRandom,
   createMockStorage,
@@ -23,12 +29,16 @@ import {
 import {
   clockContract,
   configContract,
+  fsContract,
   httpContract,
   idGenContract,
+  procContract,
   randomContract,
   storageContract,
   type ContractRoute,
 } from './contract';
+import { mockBehavior, writeScripts } from './programs';
+import { testDir, writeTree } from './workdir';
 
 // real の Clock: 後から掛けた長さ 0 の timer が呼ばれるまで待つ (event loop 1 周。時間の長さに依らない)。
 clockContract('real', () => {
@@ -104,3 +114,36 @@ idGenContract('mock', () => createMockIdGen());
 // real の Random: 実行環境の crypto.getRandomValues を使う (乱数は 外から何も読まない)。
 randomContract('real', () => createRealRandom());
 randomContract('mock', () => createMockRandom('contract'));
+
+// real の FS: 根は test が .work/ の下に作った dir だけ。木は test が disk に書いてから渡す。
+fsContract('real', (tree) => {
+  const root = testDir();
+  writeTree(root, tree);
+  return createRealFS(root);
+});
+fsContract('mock', (tree) => createMockFS(tree));
+
+// real の Proc: test が書いた node の script を process.execPath で起こす。親の環境変数は test が置いた 1 つだけを見る。
+const PARENT_ENV = { name: 'OUTSIDE_TEST_PARENT_ENV', value: 'from-parent' };
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+procContract('real', () => {
+  vi.stubEnv(PARENT_ENV.name, PARENT_ENV.value);
+  const dir = realpathSync(testDir());
+  const scripts = writeScripts(dir);
+  return {
+    proc: createRealProc({ node: process.execPath }),
+    name: 'node',
+    select: (behavior) => [scripts[behavior]],
+    dir,
+    parentEnv: PARENT_ENV,
+  };
+});
+procContract('mock', () => ({
+  proc: createMockProc({ node: mockBehavior({ [PARENT_ENV.name]: PARENT_ENV.value }) }),
+  name: 'node',
+  select: (behavior) => [behavior],
+  dir: 'work/dir',
+  parentEnv: PARENT_ENV,
+}));

@@ -1,5 +1,5 @@
-// test と設定の file の型を確かめる。test は source を読むために node の型を使う
-// (src は tsconfig.json で node の型なしに確かめる)。
+// test と設定の file の型を確かめる。src と同じく node の型を使う
+// (src の FS・Proc の real が node:* を使うため。node:* は 使う時に 動的な import で取る)。
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
