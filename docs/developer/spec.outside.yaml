@@ -68,6 +68,12 @@ cases:
     input: real = test が自分で設けた環境変数 (t.Setenv) と それを出力する helper / Unset なし・Unset あり・Unset と Env に同じ名。mock = Unset を持つ Cmd
     expect: real は 渡る・渡らない・Env の値 の順。mock の Cmds() の Unset が 渡した物と一致する。
 
+  - id: TC-OUT-PROC-STDOUT-LIMIT
+    requirement: REQ-OUT-CONTRACT
+    behavior: StdoutLimit が在れば Stdout は 先頭のその bytes まで。超えた時は StdoutTruncated = true で 子は終わるまで動き ExitCode は子の物。0 は上限なし。負は誤り。
+    input: real = test の helper が N bytes を出して exit 3 / 上限 0・N 未満・ちょうど N・N 超え / 負の上限。mock = 同じ出力を決めた関数
+    expect: real と mock で 同じ Stdout・StdoutTruncated・ExitCode。負は 子を起こさず誤り。
+
   - id: TC-OUT-PROC-LOOKPATH
     requirement: REQ-OUT-TOOL-ENV
     behavior: LookPath は 宣言した program の path を返し 宣言に無い名前は ErrUndeclaredProgram。

@@ -561,6 +561,9 @@ func (p realProc) Run(ctx context.Context, c Cmd) (Result, error) {
 	if !ok {
 		return Result{}, fmt.Errorf("%w: %s", ErrUndeclaredProgram, c.Name)
 	}
+	if c.StdoutLimit < 0 {
+		return Result{}, fmt.Errorf("outside: StdoutLimit が負 (%d)", c.StdoutLimit)
+	}
 	if file == "" {
 		found, err := exec.LookPath(c.Name)
 		if err != nil {
@@ -574,8 +577,9 @@ func (p realProc) Run(ctx context.Context, c Cmd) (Result, error) {
 	if c.Stdin != nil {
 		cmd.Stdin = bytes.NewReader(c.Stdin)
 	}
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	var stderr bytes.Buffer
+	stdout := &limitBuffer{limit: c.StdoutLimit}
+	cmd.Stdout, cmd.Stderr = stdout, &stderr
 	// stop は ctx の終わりで 止めに入ったかを持つ (exec の Cancel は 別の goroutine から呼ばれる)。
 	stop := &procStop{}
 	var group *killGroup
@@ -602,7 +606,7 @@ func (p realProc) Run(ctx context.Context, c Cmd) (Result, error) {
 	if group != nil {
 		group.finish()
 	}
-	res := Result{Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}
+	res := Result{Stdout: stdout.buf.Bytes(), Stderr: stderr.Bytes(), StdoutTruncated: stdout.truncated}
 	// 起こす前に ctx が終わっていた時 (cmd.Process が無い) も ctx の終わりで止めた事にする。
 	if ctxErr := ctx.Err(); ctxErr != nil && (stop.marked() || cmd.Process == nil) {
 		res.Killed = true
@@ -780,4 +784,26 @@ func withoutNames(env, names []string) []string {
 		}
 	}
 	return out
+}
+
+// limitBuffer は limit (0 なら 上限なし) bytes までを貯め 超えた分は読み捨てる (子の書き込みは 全部受けた事にする = 子を止めない)。
+type limitBuffer struct {
+	limit     int
+	buf       bytes.Buffer
+	truncated bool
+}
+
+func (b *limitBuffer) Write(p []byte) (int, error) {
+	if b.limit <= 0 {
+		return b.buf.Write(p)
+	}
+	room := b.limit - b.buf.Len()
+	if room >= len(p) {
+		return b.buf.Write(p)
+	}
+	if room > 0 {
+		b.buf.Write(p[:room])
+	}
+	b.truncated = true
+	return len(p), nil
 }

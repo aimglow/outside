@@ -1,6 +1,7 @@
 package outside_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -50,6 +51,12 @@ func helperMain(args []string) {
 		b, _ := io.ReadAll(os.Stdin)
 		os.Stdout.Write(b)
 		os.Exit(0)
+	case "bytes":
+		// bytes <n> <exit>: 'x' を n bytes 出して exit で終わる。
+		n, _ := strconv.Atoi(args[1])
+		code, _ := strconv.Atoi(args[2])
+		os.Stdout.Write(bytes.Repeat([]byte("x"), n))
+		os.Exit(code)
 	case "getenv":
 		if v, ok := os.LookupEnv(args[1]); ok {
 			fmt.Print("set:" + v)
@@ -1038,4 +1045,50 @@ func TestMockProc_TC_OUT_PROC_UNSET(t *testing.T) {
 	if got := p.Cmds()[0].Unset; !reflect.DeepEqual(got, []string{"A", "B"}) {
 		t.Errorf("記録の Unset = %q", got)
 	}
+}
+
+// TC-OUT-PROC-STDOUT-LIMIT: 上限を超えた分は読み捨て 子は終わるまで動く (ExitCode は子の物)。real と mock に同じ契約を掛ける。
+func stdoutLimitContract(t *testing.T, p outside.Proc) {
+	t.Helper()
+	const n = 1 << 20 // 1 MiB = pipe の buffer より大きい (読み捨てずに止めると 子が書けずに詰まる)
+	for _, tc := range []struct {
+		limit     int
+		wantLen   int
+		truncated bool
+	}{
+		{0, n, false}, {n + 1, n, false}, {n, n, false}, {16, 16, true},
+	} {
+		res, err := p.Run(context.Background(), outside.Cmd{
+			Name: "helper", Args: []string{"outside-helper", "bytes", strconv.Itoa(n), "3"}, StdoutLimit: tc.limit,
+		})
+		if err != nil {
+			t.Errorf("limit %d: Run = %v", tc.limit, err)
+			continue
+		}
+		if len(res.Stdout) != tc.wantLen || res.StdoutTruncated != tc.truncated || res.ExitCode != 3 {
+			t.Errorf("limit %d: len=%d truncated=%v exit=%d (want len=%d truncated=%v exit=3)",
+				tc.limit, len(res.Stdout), res.StdoutTruncated, res.ExitCode, tc.wantLen, tc.truncated)
+		}
+	}
+	if _, err := p.Run(context.Background(), outside.Cmd{Name: "helper", Args: []string{"outside-helper", "bytes", "1", "0"}, StdoutLimit: -1}); err == nil {
+		t.Error("負の StdoutLimit が通った")
+	}
+}
+
+func TestContract_TC_OUT_PROC_STDOUT_LIMIT(t *testing.T) {
+	t.Run("real", func(t *testing.T) {
+		self, err := os.Executable()
+		if err != nil {
+			t.Fatal(err)
+		}
+		stdoutLimitContract(t, outside.NewProc(map[string]string{"helper": self}))
+	})
+	t.Run("mock", func(t *testing.T) {
+		p := outsidemock.NewProc(map[string]func(outside.Cmd) outside.Result{"helper": func(c outside.Cmd) outside.Result {
+			n, _ := strconv.Atoi(c.Args[2])
+			code, _ := strconv.Atoi(c.Args[3])
+			return outside.Result{Stdout: bytes.Repeat([]byte("x"), n), ExitCode: code}
+		}})
+		stdoutLimitContract(t, p)
+	})
 }

@@ -260,3 +260,8 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 - go: `outside.NewReadOnlyFS(root)` を足した。この FS が作る file は 0444・dir は 0755 (完了の印など 一度書いたら上書きさせない物)。権限を呼び出しごとに渡す口・Chmod は持たない (NewPrivateFS と同じく 作る時に決める)。ccark #9970 の頼み。
 - go: 持ち主の書く bit が無い 既に在る file への WriteFile・AppendFile は fs.ErrPermission (real は OS が止める。mock も同じ誤りを返すようにした = どの作り方の FS から書いても同じ)。mock = `outsidemock.NewReadOnlyFS(tree)`・`ReadOnlyView()`。
 - 利用する側がやる事: os.WriteFile(path, b, 0o444) は NewReadOnlyFS の FS の WriteFile へ。mock で 0444 の file を上書きしていた test は fs.ErrPermission になる (real と同じ)。
+
+## go/v0.16.0 (2026-11-26)
+
+- go: Proc の `Cmd.StdoutLimit int` と `Result.StdoutTruncated bool` を足した。StdoutLimit が 0 より大きければ Stdout は 先頭の StdoutLimit bytes まで。超えた分は 読み捨てる (子は止めず 終わるまで待つ = ExitCode は子の物のまま。止める形は ExitCode が signal の物に変わり 止める時と子が終える時が競るので 取らない)。memory は 上限までに収まる。0 は 上限なし。負は 子を起こさず誤り。mock も同じ上限を当てる。ccark #9969 の頼み (巨大な blob の先頭だけを読む)。
+- 利用する側がやる事: 足すだけ。巨大な出力の先頭だけを読む所は StdoutLimit を書き 切れたかは StdoutTruncated で見る。

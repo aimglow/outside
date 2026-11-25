@@ -104,6 +104,9 @@ func (p *Proc) Run(ctx context.Context, cmd outside.Cmd) (outside.Result, error)
 	if !ok {
 		return outside.Result{}, fmt.Errorf("%w: %s", outside.ErrUndeclaredProgram, cmd.Name)
 	}
+	if cmd.StdoutLimit < 0 {
+		return outside.Result{}, fmt.Errorf("outsidemock: StdoutLimit が負 (%d)", cmd.StdoutLimit)
+	}
 	if err := ctx.Err(); err != nil {
 		return outside.Result{Killed: true}, err
 	}
@@ -111,9 +114,19 @@ func (p *Proc) Run(ctx context.Context, cmd outside.Cmd) (outside.Result, error)
 		return outside.Result{}, nil
 	}
 	res, err := fn(ctx, cmd)
+	res = limitStdout(res, cmd.StdoutLimit)
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		res.Killed = true
 		return res, ctxErr
 	}
 	return res, err
+}
+
+// limitStdout は real と同じく Stdout を 先頭の limit bytes までにし 切った事を StdoutTruncated で名乗る (0 は 上限なし)。
+func limitStdout(res outside.Result, limit int) outside.Result {
+	if limit > 0 && len(res.Stdout) > limit {
+		res.Stdout = append([]byte(nil), res.Stdout[:limit]...)
+		res.StdoutTruncated = true
+	}
+	return res
 }

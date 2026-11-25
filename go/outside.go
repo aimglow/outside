@@ -155,6 +155,9 @@ type Cmd struct {
 	// Unset は 親の環境変数から外して 子へ渡さない名。Env より先に当てる (Env で同じ名を足せば Env が効く)。
 	// 外の program の向き先を変える変数を 子へ継がせない時に使う。
 	Unset []string
+	// StdoutLimit が 0 より大きければ Result.Stdout は 先頭の StdoutLimit bytes まで (超えた分は読み捨て 子は止めない)。
+	// 0 は 上限なし。負は 誤り (子を起こさない)。巨大な出力の先頭だけを読む時に memory を上限までに収める。
+	StdoutLimit int
 	// Stdin は 子 process の標準入力に渡す中身。nil なら 何も渡さない。
 	// 秘密 (鍵・password) を disk にも argv にも載せずに渡す時に使う。
 	Stdin []byte
@@ -174,6 +177,8 @@ type Result struct {
 	ExitCode int
 	Stdout   []byte
 	Stderr   []byte
+	// StdoutTruncated は Cmd.StdoutLimit を超えて Stdout を切った時 true。
+	StdoutTruncated bool
 	// Killed は ctx の終わりで止めた時 true (その時 Run の誤りは ctx の誤りを包む)。子が自分で終えた時は false。
 	Killed bool
 }
