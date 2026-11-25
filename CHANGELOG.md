@@ -249,3 +249,8 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 - go (直し): go/v0.13.0・v0.13.1 の go/iofs.go が gofmt していない形だった (doc の comment の前の空行。門番が v0.13.0 で IOFS の Mode を直した時に gofmt を回さずに出した)。取り込んだ project の push 前の gofmt の段で落ちる (daikokuten の名指し)。gofmt した。口と振る舞いは変えない。
 - scripts/release.sh: go・lint-go・lint-platform は gofmt していない file (vendor を除く) が在れば tag を打たずに止まる (写しは project で直せないため)。scripts/test-scripts.sh に その確かめ (止め方を外すと赤くなる事も確かめた)。
 - 利用する側がやる事: go/v0.13.0・v0.13.1 を取り込んだ project は ./scripts/sync-outside.sh go go/v0.13.2。
+
+## go/v0.14.0 (2026-11-26)
+
+- go: SysInfo に `Getwd()`・`ConfigDir()`・`CacheDir()` (どれも `(string, error)`、引けなければ・空なら 誤り) と `Ppid() int` を足した。lint-go が『SysInfo を通す』で落とす呼び出し (os.Getwd・Getppid・UserConfigDir・UserCacheDir) に 受け先が無かったため (ccark #9970 の名指しは Getwd。同じ食い違いの残り 3 つも足した)。mock = `SysInfoValues` の `Getwd`・`ConfigDir`・`CacheDir`・`Ppid` (空なら 誤り・Ppid は 0)。
+- 利用する側がやる事: SysInfo を自前で実装している型は 足した 4 method を実装する (outside の real と mock だけなら 不要)。os.Getwd 等を直に呼ぶ所は Set.SysInfo へ。

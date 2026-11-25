@@ -8,8 +8,13 @@ type SysInfoValues struct {
 	Hostname string
 	// HomeDir が空なら HomeDir は 誤り。
 	HomeDir string
-	Pid     int
-	IsTTY   bool
+	// ConfigDir・CacheDir・Getwd が空なら それぞれ 誤り。
+	ConfigDir string
+	CacheDir  string
+	Getwd     string
+	Pid       int
+	Ppid      int
+	IsTTY     bool
 }
 
 // SysInfo は 渡した値を返す mock。機体と process の値を読まない。
@@ -35,6 +40,35 @@ func (s *SysInfo) HomeDir() (string, error) {
 		return "", fmt.Errorf("outsidemock: home の dir が宣言されていない")
 	}
 	return s.v.HomeDir, nil
+}
+
+func (s *SysInfo) ConfigDir() (string, error) {
+	s.record("ConfigDir")
+	if s.v.ConfigDir == "" {
+		return "", fmt.Errorf("outsidemock: user の設定の置き場が宣言されていない")
+	}
+	return s.v.ConfigDir, nil
+}
+
+func (s *SysInfo) CacheDir() (string, error) {
+	s.record("CacheDir")
+	if s.v.CacheDir == "" {
+		return "", fmt.Errorf("outsidemock: user の cache の置き場が宣言されていない")
+	}
+	return s.v.CacheDir, nil
+}
+
+func (s *SysInfo) Getwd() (string, error) {
+	s.record("Getwd")
+	if s.v.Getwd == "" {
+		return "", fmt.Errorf("outsidemock: 作業 dir が宣言されていない")
+	}
+	return s.v.Getwd, nil
+}
+
+func (s *SysInfo) Ppid() int {
+	s.record("Ppid")
+	return s.v.Ppid
 }
 
 func (s *SysInfo) Pid() int {

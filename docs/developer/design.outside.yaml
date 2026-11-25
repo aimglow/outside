@@ -159,9 +159,11 @@ ports:
       mock: memory の上の木。FS も memory の上。
     - name: SysInfo
       does: 動いている機体と process の値を返す (host の名前・home の dir・process の番号・標準入力が端末か)。
-      methods: [Hostname, HomeDir, Pid, IsTTY]
-      rule: Hostname と HomeDir は 引けなければ 誤りを返す (空の文字で黙らない)。
-      mock: 渡した値を返す。渡していない値は 誤り (Hostname・HomeDir) か 0・false。
+      methods: [Hostname, HomeDir, ConfigDir, CacheDir, Getwd, Pid, Ppid, IsTTY]
+      rule: >
+        Hostname・HomeDir・ConfigDir (user の設定の置き場)・CacheDir (user の cache の置き場)・Getwd (process の今の作業 dir) は 引けなければ 誤りを返す (空の文字で黙らない)。
+        Ppid は 親の process の番号。lint-go が SysInfo を通せと言って落とす呼び出し (os.Hostname・Getpid・Getppid・Getwd・UserHomeDir・UserConfigDir・UserCacheDir) は 全て この口に受け先を持つ。
+      mock: 渡した値を返す。渡していない値は 誤り (Hostname・HomeDir・ConfigDir・CacheDir・Getwd) か 0・false。
     - name: IdGen
       does: 新しい ID を返す。
       methods: [NewID]

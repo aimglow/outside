@@ -286,11 +286,18 @@ func sysInfoContract(t *testing.T, s outside.SysInfo) {
 	if v, err := s.Hostname(); err == nil && v == "" {
 		t.Error("Hostname が 誤り無しで 空を返した")
 	}
-	if v, err := s.HomeDir(); err == nil && v == "" {
-		t.Error("HomeDir が 誤り無しで 空を返した")
+	for name, get := range map[string]func() (string, error){
+		"HomeDir": s.HomeDir, "ConfigDir": s.ConfigDir, "CacheDir": s.CacheDir, "Getwd": s.Getwd,
+	} {
+		if v, err := get(); err == nil && v == "" {
+			t.Errorf("%s が 誤り無しで 空を返した", name)
+		}
 	}
 	if pid := s.Pid(); pid <= 0 {
 		t.Errorf("Pid = %d (want 正の数)", pid)
+	}
+	if ppid := s.Ppid(); ppid < 0 {
+		t.Errorf("Ppid = %d (want 0 以上)", ppid)
 	}
 	_ = s.IsTTY()
 }

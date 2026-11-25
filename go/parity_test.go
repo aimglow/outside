@@ -17,7 +17,7 @@ var designPorts = map[string][]string{
 	"FS":      {"ReadFile", "WriteFile", "ReadDir", "Stat", "Remove", "Open", "AppendFile", "MkdirAll", "Lstat", "Rename", "RemoveAll", "Symlink", "Readlink"},
 	"Proc":    {"Run", "LookPath"},
 	"Workdir": {"New", "Path", "Cleanup", "FS"},
-	"SysInfo": {"Hostname", "HomeDir", "Pid", "IsTTY"},
+	"SysInfo": {"Hostname", "HomeDir", "ConfigDir", "CacheDir", "Getwd", "Pid", "Ppid", "IsTTY"},
 	"IdGen":   {"NewID"},
 	"Random":  {"Read"},
 }

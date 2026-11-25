@@ -117,8 +117,16 @@ type SysInfo interface {
 	Hostname() (string, error)
 	// HomeDir は 動かしている user の home の dir を返す。引けなければ 誤り。
 	HomeDir() (string, error)
+	// ConfigDir は user の設定の置き場 (os.UserConfigDir) を返す。引けなければ 誤り。
+	ConfigDir() (string, error)
+	// CacheDir は user の cache の置き場 (os.UserCacheDir) を返す。引けなければ 誤り。
+	CacheDir() (string, error)
+	// Getwd は process の今の作業 dir を返す。引けなければ 誤り。
+	Getwd() (string, error)
 	// Pid は この process の番号を返す。
 	Pid() int
+	// Ppid は 親の process の番号を返す。
+	Ppid() int
 	// IsTTY は 標準入力が 端末 (文字 device) かを返す。
 	IsTTY() bool
 }

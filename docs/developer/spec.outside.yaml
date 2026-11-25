@@ -82,9 +82,9 @@ cases:
 
   - id: TC-OUT-SYSINFO-MOCK
     requirement: REQ-OUT-MOCK
-    behavior: mock の SysInfo は 渡した値だけを返す。渡していない Hostname・HomeDir は 誤り。
+    behavior: mock の SysInfo は 渡した値だけを返す。渡していない Hostname・HomeDir・ConfigDir・CacheDir・Getwd は 誤り。
     input: host の名前・home の dir・process の番号・端末か の値 / 何も渡さない mock
-    expect: 返る値が入力に一致する。何も渡さない mock の Hostname・HomeDir は 誤り、Pid は 0、IsTTY は false。機体の値は 結果に現れない。
+    expect: 返る値が入力に一致する。何も渡さない mock の Hostname・HomeDir・ConfigDir・CacheDir・Getwd は 誤り、Pid・Ppid は 0、IsTTY は false。機体の値は 結果に現れない。
 
   - id: TC-OUT-IDGEN-MOCK
     requirement: REQ-OUT-MOCK
@@ -172,7 +172,7 @@ cases:
     requirement: REQ-OUT-CONTRACT
     behavior: 口ごとの契約の test を real と mock の両方に掛け 両方が通る。
     input: 口ごとの契約 (例 Clock = Now は戻らない / FS = 書いた中身が読める・根の外は誤り / Env = 無い名前は 無い /
-      SysInfo = Hostname と HomeDir は 空でない値か 誤り・Pid は 正の数 (mock は 渡した値) /
+      SysInfo = Hostname・HomeDir・ConfigDir・CacheDir・Getwd は 空でない値か 誤り・Pid は 正の数・Ppid は 0 以上 (mock は 渡した値) /
       IdGen = 続けて呼んだ ID は 互いに違い 空でない /
       Random = Read は p を全部埋め n=len(p)・誤り無し、続けて読んだ 32 byte は 互いに違う /
       Proc = Stdin が子 process の標準入力に届き 無ければ空 /

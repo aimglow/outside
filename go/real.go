@@ -429,7 +429,35 @@ func (realSysInfo) HomeDir() (string, error) {
 	return dir, nil
 }
 
+// nonEmpty は 引けた値が空でなければ返す。誤りか空なら what を名乗る誤り。
+func nonEmpty(what string, v string, err error) (string, error) {
+	if err != nil {
+		return "", fmt.Errorf("outside: %s が引けない: %w", what, err)
+	}
+	if v == "" {
+		return "", fmt.Errorf("outside: %s が空", what)
+	}
+	return v, nil
+}
+
+func (realSysInfo) ConfigDir() (string, error) {
+	v, err := os.UserConfigDir()
+	return nonEmpty("user の設定の置き場", v, err)
+}
+
+func (realSysInfo) CacheDir() (string, error) {
+	v, err := os.UserCacheDir()
+	return nonEmpty("user の cache の置き場", v, err)
+}
+
+func (realSysInfo) Getwd() (string, error) {
+	v, err := os.Getwd()
+	return nonEmpty("作業 dir", v, err)
+}
+
 func (realSysInfo) Pid() int { return os.Getpid() }
+
+func (realSysInfo) Ppid() int { return os.Getppid() }
 
 func (realSysInfo) IsTTY() bool {
 	info, err := os.Stdin.Stat()

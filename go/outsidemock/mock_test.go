@@ -264,22 +264,40 @@ func TestFSMock_TreeDeclaration(t *testing.T) {
 
 // TC-OUT-SYSINFO-MOCK: 渡した値だけを返す。渡していない Hostname・HomeDir は 誤り、Pid は 0、IsTTY は false。
 func TestSysInfoMock_TC_OUT_SYSINFO_MOCK(t *testing.T) {
-	s := outsidemock.NewSysInfo(outsidemock.SysInfoValues{Hostname: "host-a", HomeDir: "/home/a", Pid: 4242, IsTTY: true})
+	s := outsidemock.NewSysInfo(outsidemock.SysInfoValues{Hostname: "host-a", HomeDir: "/home/a", ConfigDir: "/home/a/.config", CacheDir: "/home/a/.cache", Getwd: "/work/a", Pid: 4242, Ppid: 1, IsTTY: true})
 	if got, err := s.Hostname(); err != nil || got != "host-a" {
 		t.Errorf("Hostname = %q, %v", got, err)
 	}
 	if got, err := s.HomeDir(); err != nil || got != "/home/a" {
 		t.Errorf("HomeDir = %q, %v", got, err)
 	}
+	for name, tc := range map[string]struct {
+		get  func() (string, error)
+		want string
+	}{
+		"ConfigDir": {s.ConfigDir, "/home/a/.config"}, "CacheDir": {s.CacheDir, "/home/a/.cache"}, "Getwd": {s.Getwd, "/work/a"},
+	} {
+		if got, err := tc.get(); err != nil || got != tc.want {
+			t.Errorf("%s = %q, %v (want %q)", name, got, err, tc.want)
+		}
+	}
 	if got := s.Pid(); got != 4242 {
 		t.Errorf("Pid = %d", got)
+	}
+	if got := s.Ppid(); got != 1 {
+		t.Errorf("Ppid = %d", got)
 	}
 	if !s.IsTTY() {
 		t.Error("IsTTY = false (want true)")
 	}
-	want := []outsidemock.Call{{Method: "Hostname"}, {Method: "HomeDir"}, {Method: "Pid"}, {Method: "IsTTY"}}
-	if got := s.Calls(); !reflect.DeepEqual(got, want) {
-		t.Errorf("記録 = %+v", got)
+	gotMethods := map[string]int{}
+	for _, c := range s.Calls() {
+		gotMethods[c.Method]++
+	}
+	for _, m := range []string{"Hostname", "HomeDir", "ConfigDir", "CacheDir", "Getwd", "Pid", "Ppid", "IsTTY"} {
+		if gotMethods[m] != 1 {
+			t.Errorf("%s の記録 = %d 回 (want 1)", m, gotMethods[m])
+		}
 	}
 
 	// 何も渡さない mock は 機体の値を返さない。
@@ -289,6 +307,14 @@ func TestSysInfoMock_TC_OUT_SYSINFO_MOCK(t *testing.T) {
 	}
 	if got, err := empty.HomeDir(); err == nil {
 		t.Errorf("渡していない HomeDir が通った: %q", got)
+	}
+	for name, get := range map[string]func() (string, error){"ConfigDir": empty.ConfigDir, "CacheDir": empty.CacheDir, "Getwd": empty.Getwd} {
+		if got, err := get(); err == nil {
+			t.Errorf("渡していない %s が通った: %q", name, got)
+		}
+	}
+	if got := empty.Ppid(); got != 0 {
+		t.Errorf("渡していない Ppid = %d (want 0)", got)
 	}
 	if got := empty.Pid(); got != 0 {
 		t.Errorf("渡していない Pid = %d (want 0)", got)
