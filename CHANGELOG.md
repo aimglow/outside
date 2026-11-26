@@ -278,5 +278,11 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
   - tests: 置き場 = platform_dir の下 と adapter_dirs。
   - check・scaffold: `--root` を省けば platform_dir を使う (repo の根で撃つ)。宣言と違う `--root` は 判定不能 (3)。`""` の check は 命名の検査をせず 名乗って 0、`""` の scaffold は `--root` が要る (3)。
   - 前の版の lint-platform は platform_dir を知らない key として 判定不能にする = 宣言は v0.4.0 を取り込んでから。
-- docs: enforcement.md §4.1・§4.2 に platform_dir を書いた。
+- docs/v0.13.0 は 中身が docs/v0.12.0 と同じ (門番の手順の誤りで docs の直しが入らないまま出た)。直しは docs/v0.13.1。
 - 利用する側がやる事: 足すだけ (宣言を書かなければ 今のまま)。libs/platform を adapters に使わない repo は platform_dir = "" と adapter_dirs を書き、check の段の `--root` を省く。
+
+## docs/v0.13.1 (2026-11-26)
+
+- docs: enforcement.md §4.1・§4.2 に platform_dir (adapters の置き場の宣言) を書いた。設計書の lint.platform.tests と テスト仕様 TC-OUT-LINT-PLATFORM-PLATFORM-DIR も同じ形に。
+- 利用する側がやる事: docs/v0.13.0 を取り込んだ project は docs/v0.13.1 へ (v0.13.0 は v0.12.0 と同じ中身)。
+

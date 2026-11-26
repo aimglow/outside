@@ -312,14 +312,16 @@ lint:
             その adapter_real.dart が宣言する class・top level の関数の名前を 呼び出すか member を引く (名前の照合)。
         output: >
           違反 <path>:<行>: <runtime> の test が 本物の口 <名前> を使う (置き場の外。test-classification.md §4)。
-      allowed: libs/platform/** と 宣言 adapter_dirs (repo の根からの相対 path の一覧。path の区切りで比べる。空・.・絶対 path・根の外は 宣言できない = 判定不能)。
+      allowed: >
+        adapters の置き場 (宣言 platform_dir。書かなければ libs/platform、"" なら 持たない) の下と 宣言 adapter_dirs (repo の根からの相対 path の一覧。path の区切りで比べる。空・.・絶対 path・根の外は 宣言できない = 判定不能)。
+        platform_dir は repo で libs/platform が adapters でない用途の時に 置き場を外す・移す宣言 (書かなければ 今の振る舞い)。check・scaffold も 同じ置き場を使う (--root を省けば platform_dir。宣言と違う --root は 判定不能。"" の check は 検査せずに名乗って 0、"" の scaffold は --root が要る)。
       skip: .git・node_modules・.dart_tool の dir と libs/outside/** (取り込んだ写し。部品の test は写さない) と symlink の dir。
       not_checked: >
         印を持たず 本物の口も使わずに 本物の外部に触れる test (標準 library を直に呼ぶ等。書く時の審査と testguard-writing が持つ)。
         反射・文字列で組んだ import・動的 import (import()・require)・tsconfig の paths の別名だけで lib を指す import・
         go.mod の replace で 別の module path に付け替えた import・本物を返す 置き場の外の helper を経由する形 は 見えない。
       exit: 0 = 置き場の外に無い / 1 = 在る (file と行と runtime と名前を名指す) / 3 = 読めない (木・宣言・file・式が読めない。path を名乗る)。
-      vocab: outside-platform.toml に書けるのは capabilities と adapter_dirs (check・scaffold・tests が 同じ宣言を読む)。
+      vocab: outside-platform.toml に書けるのは capabilities・adapter_dirs・platform_dir (check・scaffold・tests が 同じ宣言を読む)。
     cases:
       # 想定したケース。表に無いケースが出たら ここに足し 規則を直す。
       - 新しい外の依存先 (同じ機能・別の依存先、例 db-mysql-go) → 今の語で表せる

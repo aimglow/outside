@@ -164,6 +164,7 @@ dart run outside_lint:check apps libs/platform
   - `naming/rules.go` = 規則の正本（runtime の 4 つ・全 project 共通の機能の語・中身を表さない語・runtime ごとの 3 file の名前）。docs は ここを指すだけで 語の表を写さない。
   - `naming/check.go` = 判定（値を受け 違反と警告を値で返す。disk を読まない）。`naming/scaffold.go` = 雛形（名前と 3 file の中身を値で返す）。
   - `main.go` = 入口（`check` と `scaffold`）。
+- adapters の置き場は 宣言 `platform_dir`（書かなければ `libs/platform`。repo で `libs/platform` が別の用途なら `""` = 持たない か 別の dir）。`--root` を省けば それを使い（repo の根で撃つ）、宣言と違う `--root` は 判定不能。`""` の check は 検査せずに名乗って 0。
 - 決めるのは 3 つだけ: ①直下の dir 名が `<機能>-<依存先>-<runtime>` ②直下に dir 以外を置かない ③各 lib に runtime の 3 file（直下か `src/` か `lib/`）。lib の中の sub dir・3 file 以外の file・設定の file は見ない（言語とツールの慣習に任せる）。
 - project 固有の機能の語 = repo の根の `outside-platform.toml` に `capabilities = ["pay", ...]`。中身を表さない語（`common`・`util`・`shared`・`helper`・`misc` 等）は宣言できない（判定不能 = exit 3）。
 - 同じ runtime で 同じ依存先が 2 つの機能に在れば 警告（止めない）。
@@ -178,7 +179,7 @@ dart run outside_lint:check apps libs/platform
 ## 4.2 本物の外部に触れる test の置き場の検査（`outside` の `lint-platform` の `tests`）
 
 - 決まりの正本 = `reference.deterministic-testing.test-classification.md` §4（本物の外部に触れる test は `outside` と adapters の中だけ。apps・tools には 印を付けても置かない）。この検査は それを機械で止める。
-- 置いてよい場所 = `libs/platform/**` と repo の根の `outside-platform.toml` の `adapter_dirs = ["..."]`（repo の根からの相対 path。`.`・空・絶対 path・根の外は 判定不能）。
+- 置いてよい場所 = adapters の置き場（`outside-platform.toml` の `platform_dir`。書かなければ `libs/platform`、`""` なら持たない）の下と 同じ宣言の `adapter_dirs = ["..."]`（repo の根からの相対 path。`.`・空・絶対 path・根の外は 判定不能）。
 - 落とす物（置いてよい場所の外の test の file）:
   - integration の印を持つ test（Go = `//go:build` に `integration`、TS = `*.integration.spec.*`・`*.integration.test.*`、Dart = `@Tags([... 'integration' ...])` か `tags:` の `'integration'`）。
   - 印に依らず 本物の口を作る物を使う test（outside の本物 = Go の `outside.New*`・`RunTool`、TS の `createReal*`、Dart の `Real*(…)`・`OutsideSet.real`。adapters の本物 = `adapter_real.go`・`src/real.ts`・`adapter_real.dart` が公開する名前）。mock だけを使う test は通す。

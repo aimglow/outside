@@ -274,6 +274,14 @@ cases:
       印なし・libs/platform の下・宣言の dir の下・node_modules と libs/outside の下・mock だけの test・置き場の中の本物は 名指さない。
       . と 根の外の宣言は exit 3。
 
+  - id: TC-OUT-LINT-PLATFORM-PLATFORM-DIR
+    requirement: REQ-OUT-INTEGRATION-PLACE
+    behavior: 宣言 platform_dir が adapters の置き場を決める。書かない = libs/platform、"" = 持たない (adapter_dirs だけ)、path = その dir。check は 同じ置き場を使う。
+    input: libs/platform/x/be/real_test.go・adapters/y/real_test.go・libs/adapters/z/real_test.go (どれも integration の印) と adapter_dirs = ["adapters"] / platform_dir を 書かない・""・"libs/adapters" / "."・"../x"・"/abs"・数の宣言 / platform_dir = "" の check (--root なし と --root libs/platform) と scaffold
+    expect: >
+      書かない = libs/adapters の物だけ違反。"" = libs/platform と libs/adapters の物が違反。"libs/adapters" = libs/platform の物だけ違反。不正な宣言は exit 3。
+      "" の check は 命名の検査をせず名乗って 0、宣言と違う --root は 3、--root の無い scaffold は 3。
+
   - id: TC-OUT-SYNC
     requirement: REQ-OUT-VENDOR
     behavior: >
