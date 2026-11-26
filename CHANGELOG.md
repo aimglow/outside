@@ -265,3 +265,9 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 
 - go: Proc の `Cmd.StdoutLimit int` と `Result.StdoutTruncated bool` を足した。StdoutLimit が 0 より大きければ Stdout は 先頭の StdoutLimit bytes まで。超えた分は 読み捨てる (子は止めず 終わるまで待つ = ExitCode は子の物のまま。止める形は ExitCode が signal の物に変わり 止める時と子が終える時が競るので 取らない)。memory は 上限までに収まる。0 は 上限なし。負は 子を起こさず誤り。mock も同じ上限を当てる。ccark #9969 の頼み (巨大な blob の先頭だけを読む)。
 - 利用する側がやる事: 足すだけ。巨大な出力の先頭だけを読む所は StdoutLimit を書き 切れたかは StdoutTruncated で見る。
+
+## docs/v0.12.0 (2026-11-26)
+
+- docs: operations.md に §7『取り込みの教訓』を足した (取り込みを済ませた project の完了の証跡から一般化。口の組を固めて 1.0.0 にしてから取り込む・docs と実物の一致を test で止める・push と審査は区切りで 1 回・段を足す前の 3 問・合流後の木で回す段・置き場を審査役に結ぶ・差し戻しの型・合格の確かめ)。
+- docs: §6 の 5 (最終の確かめ) を実測に合わせた: 1 回目に回る段は 組込の go test だけで その中で実行される package は 0、2 回目は 回った段 0。
+- 利用する側がやる事: docs/v0.12.0 を取り込む。§6 の 5 の確かめ方が変わった。

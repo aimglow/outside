@@ -82,6 +82,27 @@ outside repo (github.com/aimglow/outside、編集するのは outside 門番だ�
 2. 外を直に呼ぶ code が `libs/outside`・`libs/platform/*` の real・入口の `main` にしか無い = lint-go・lint-ts・lint-dart (その project の stack の分) の違反 0。Nx の `layer:` 境界の違反 0。
 3. `libs/platform` が lint-platform の check に通る (push の前の検査の段として宣言)。依存先に固有の取り決めを読む物は lib、起こして終了コードを見るだけの物は `outside` の子 process の口。
 4. test が ccark の `docs/conventions/test-writing.md` に合う: §6 の 4 条件 (段 `testguard-writing`・既存の違反の棚卸し・外の入力の宣言 (Nx の task の inputs を含む)・陽性対照) を満たし、app と tool の test は mock だけ、実物に触れる test は `libs/platform` の結合 test (tag `integration`) だけ、分類 C (test-classification.md §1) は消す。
-5. 最終の確かめ = 独立の clone で `e2e/cache_test.txt` (無ければ作る) に 1 行足して commit し `ccark prepush-gate --full --keep-going` → 回った段 0。同じ commit の 2 回目 → 回った段 0。両方の log の行を issue に置く。回った段が残れば 段の名前と理由 (log の「段の指紋の再利用をしない [理由]」) を名指し、ccark の側の原因なら ccark の窓口へ送る。
+5. 最終の確かめ = 独立の clone で `e2e/cache_test.txt` (無ければ作る) に 1 行足して commit し `ccark prepush-gate --full --keep-going` → 回る段は 組込の go test だけで その中で実行される package は 0。同じ commit の 2 回目 → 回った段 0。両方の log の行を issue に置く。回った段が残れば 段の名前と理由 (log の「段の指紋の再利用をしない [理由]」) を名指し、ccark の側の原因なら ccark の窓口へ送る。
 6. 以上が その project の流れで main (または 宣言の land 先) に land している。
+
+---
+
+## 7. 取り込みの教訓 (次の基盤の設計と 次に取り込む project へ)
+
+取り込みを済ませた project の完了の証跡から一般化した決め。基盤を足す時・取り込みを始める時に 先に読む。
+
+1. **口の組を先に固め 版を 1.0.0 にしてから取り込む。** 最初の利用者と一緒に口を決めると 版が短い間に十数回動き 利用者は取り込み直しを繰り返す。口の組は 利用者が書き直す呼び出しを先に数え (lint の違反の一覧)、受け先の無い禁止を残さない形で揃えてから出す。
+2. **docs と実物の一致を outside の test で止める。** docs を先に書くと 実物との食い違いが利用者の側で見つかる。docs に書く撃ち方・名前・語は outside の test (陽性対照つき) が確かめる物だけにする。
+3. **push は区切りで 1 回、審査も 1 回。** 審査の記録は sha に結ばれるので push の度に振り出しへ戻る。作業を区切りまで手元で進め 1 回の push と 1 回の審査で通す。
+4. **段を足す前に 3 問を問う。** ①何を確かめるか ②毎回要るか (入力が変わらなければ回らない形か) ③比べる相手を 直に git で読む前提は正しいか (段の出力を cache の鍵に入れない・比べる相手は 段の入力として宣言する)。
+5. **land の段では 合流後の木で lint・testguard・写しの `--check` を回す。** 古い branch の merge で 取り決めや写しが消える・戻るのを止める。各段に 患部が在る状態で赤くなる陽性対照を付ける。
+6. **outside と platform の置き場を 審査役に結ぶ。** `libs/outside/**`・`scripts/sync-outside.sh`・`outside-platform.toml`・`docs/deterministic-testing/**`・lint の設定を owner-paths で 審査役に結ぶ (取り決めの置き場の変更を 審査を経ずに入れない)。
+7. **審査で差し戻す型。** 次を見たら差し戻す:
+   - TOML の key の重複
+   - mock が 知らない入力に 空で答える (V3 = 知らない入力は誤り)
+   - 比べる相手を cache の鍵に入れない (R1 = 結果は source だけで決まる)
+   - app の test が 本物の adapter を使う (lint-platform の tests が止める = enforcement.md §4.2)
+   - 判定不能が FAIL を隠す (判定不能は 独立の区分で返す)
+   - 段が 自分の要る物を 自分で用意しない (他の段の出力や 機体に元から在る物に頼る)
+8. **合格の確かめ** = §6 の 5。1 回目に回る段が 組込の go test だけで その中の実行が 0、2 回目が 0 なら cache が効いている。
 
