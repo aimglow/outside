@@ -164,7 +164,7 @@ dart run outside_lint:check apps libs/platform
   - `naming/rules.go` = 規則の正本（runtime の 4 つ・全 project 共通の機能の語・中身を表さない語・runtime ごとの 3 file の名前）。docs は ここを指すだけで 語の表を写さない。
   - `naming/check.go` = 判定（値を受け 違反と警告を値で返す。disk を読まない）。`naming/scaffold.go` = 雛形（名前と 3 file の中身を値で返す）。
   - `main.go` = 入口（`check` と `scaffold`）。
-- adapters の置き場は 宣言 `platform_dir`（書かなければ `libs/platform`。repo で `libs/platform` が別の用途なら `""` = 持たない か 別の dir）。`--root` を省けば それを使い（repo の根で撃つ）、宣言と違う `--root` は 判定不能。`""` の check は 検査せずに名乗って 0。
+- adapters の置き場は 宣言 `platform_dir`（書かなければ `libs/platform`。repo で `libs/platform` が別の用途なら `""` = 持たない か 別の dir）。`--root` を省けば それを使い（repo の根で撃つ）、宣言と違う `--root` は 判定不能。`""` の check は `adapter_dirs` の各 dir の直下を adapters の置き場として 同じ検査を当てる（`adapter_dirs` が無ければ 検査せずに名乗って 0）。宣言の置き場は 宣言の file の dir を基準に読む。
 - 決めるのは 3 つだけ: ①直下の dir 名が `<機能>-<依存先>-<runtime>` ②直下に dir 以外を置かない ③各 lib に runtime の 3 file（直下か `src/` か `lib/`）。lib の中の sub dir・3 file 以外の file・設定の file は見ない（言語とツールの慣習に任せる）。
 - project 固有の機能の語 = repo の根の `outside-platform.toml` に `capabilities = ["pay", ...]`。中身を表さない語（`common`・`util`・`shared`・`helper`・`misc` 等）は宣言できない（判定不能 = exit 3）。
 - 同じ runtime で 同じ依存先が 2 つの機能に在れば 警告（止めない）。

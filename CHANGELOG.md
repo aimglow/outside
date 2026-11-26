@@ -291,3 +291,12 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 
 - docs: operations.md §6 の 1 に 設計の repo と実装の repo に分かれた product の形を足した (docs の部品は設計の repo に置き --check を回し、実装の repo の CLAUDE.md から必読として指し、code の部品は実装の repo に置く)。yaoyorozu の問い。
 - 利用する側がやる事: docs/v0.14.0 を取り込む。分かれた repo の product は この形で §6 の 1 を満たす。
+
+## lint-platform/v0.5.0・docs/v0.15.0 (2026-11-26)
+
+- lint-platform: platform_dir = "" の check は adapter_dirs の各 dir の直下を adapters の置き場として 命名 (`<機能>-<依存先>-<runtime>`) と 3 file の検査を当て 重い結末 (3 > 1 > 0) を返す (adapter_dirs が無ければ 今のとおり名乗って 0)。置き場を adapter_dirs だけで宣言した repo でも 置き場の検査が効く。yaoyorozu の頼み。
+- lint-platform: 宣言の置き場 (platform_dir・adapter_dirs) は 宣言の file (repo の根に置く) の dir を基準に読む (--root を省いた check・scaffold が 撃つ場所に依らない)。
+- platform_dir を宣言した repo の振る舞いは変えない (adapter_dirs は check しない)。
+- docs: enforcement.md §4.1 に上の形を書いた。
+- 利用する側がやる事: platform_dir = "" の repo は adapter_dirs の各 dir の直下が 命名と 3 file の規則に合う事を確かめる (合わなければ check が 1 になる)。
+

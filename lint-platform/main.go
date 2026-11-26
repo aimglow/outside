@@ -4,7 +4,8 @@
 //	scaffold [--root <adapters の置き場>] [--vocab outside-platform.toml] <機能> <依存先> <runtime>
 //
 // adapters の置き場 = 宣言 platform_dir (書かなければ libs/platform、"" なら 置き場を持たない)。--root を省けば それを使う
-// (repo の根で撃つ)。platform_dir を書いた宣言で --root が それと違えば 判定不能 (3)。置き場を持たない宣言の check は 検査せずに名乗って 0。
+// (repo の根で撃つ)。platform_dir を書いた宣言で --root が それと違えば 判定不能 (3)。platform_dir = "" の check は
+// adapter_dirs の各 dir の直下を adapters の置き場として 同じ検査を当てる (adapter_dirs が無ければ 検査せずに名乗って 0)。
 //
 //	tests    --repo <repo の根> [--vocab <repo の根>/outside-platform.toml]
 //
@@ -74,10 +75,22 @@ func run(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "lint-platform scaffold: adapters の置き場を持たない宣言 (platform_dir = \"\") = --root で作る dir を指す")
 			return 3
 		}
-		fmt.Fprintf(stdout, "lint-platform check: adapters の置き場を持たない宣言 (platform_dir = \"\") = 命名の検査はしない (置き場 = %s)\n", d.place.Places())
-		return 0
+		dirs := d.place.AdapterDirs()
+		if len(dirs) == 0 {
+			fmt.Fprintf(stdout, "lint-platform check: adapters の置き場を持たない宣言 (platform_dir = \"\"・adapter_dirs なし) = 命名の検査はしない\n")
+			return 0
+		}
+		// 置き場を adapter_dirs だけで宣言した時は 各 dir の直下を adapters の置き場として 同じ検査を当てる (重い結末 3 > 1 > 0 を返す)。
+		worst := 0
+		// adapter_dirs は repo の根からの相対 path = 宣言の file (repo の根に置く) の dir を基準に読む (撃つ場所に依らない)。
+		base := filepath.Dir(*vocabPath)
+		for _, dir := range dirs {
+			worst = worse(worst, check(filepath.Join(base, filepath.FromSlash(dir)), d.vocab, stdout, stderr))
+		}
+		return worst
 	case *root == "":
-		*root = pdir
+		// 宣言の置き場は repo の根からの相対 path = 宣言の file (repo の根に置く) の dir を基準に読む (撃つ場所に依らない)。
+		*root = filepath.Join(filepath.Dir(*vocabPath), filepath.FromSlash(pdir))
 	case declared && filepath.ToSlash(filepath.Clean(*root)) != pdir:
 		fmt.Fprintf(stderr, "lint-platform: --root %s と 宣言 platform_dir %q が違う (判定不能。--root を省くか 宣言に合わせる)\n", *root, pdir)
 		return 3
@@ -127,6 +140,23 @@ func loadDecl(path string) (decl, error) {
 		return decl{}, err
 	}
 	return decl{vocab: v, place: p}, nil
+}
+
+// worse は 2 つの結末の重い方 (判定不能 3 > 違反 1 > 違反なし 0)。
+func worse(a, b int) int {
+	rank := func(c int) int {
+		switch c {
+		case 3:
+			return 2
+		case 1:
+			return 1
+		}
+		return 0
+	}
+	if rank(b) > rank(a) {
+		return b
+	}
+	return a
 }
 
 func check(root string, v naming.Vocab, stdout, stderr io.Writer) int {

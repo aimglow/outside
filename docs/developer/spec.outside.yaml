@@ -280,7 +280,8 @@ cases:
     input: libs/platform/x/be/real_test.go・adapters/y/real_test.go・libs/adapters/z/real_test.go (どれも integration の印) と adapter_dirs = ["adapters"] / platform_dir を 書かない・""・"libs/adapters" / "."・"../x"・"/abs"・数の宣言 / platform_dir = "" の check (--root なし と --root libs/platform) と scaffold
     expect: >
       書かない = libs/adapters の物だけ違反。"" = libs/platform と libs/adapters の物が違反。"libs/adapters" = libs/platform の物だけ違反。不正な宣言は exit 3。
-      "" の check は 命名の検査をせず名乗って 0、宣言と違う --root は 3、--root の無い scaffold は 3。
+      "" の check は adapter_dirs の各 dir の直下に 命名と 3 file の検査を当てる (a/io/db-postgres-go に 3 file = 0、1 つ欠ける = 1、a/io/bad_name = 1、在らない dir = 3)。adapter_dirs が無ければ 名乗って 0。
+      platform_dir を宣言した check は adapter_dirs を見ない。宣言と違う --root は 3、--root の無い scaffold は 3。
 
   - id: TC-OUT-SYNC
     requirement: REQ-OUT-VENDOR

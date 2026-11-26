@@ -284,3 +284,59 @@ func TestCheck_PlatformDir(t *testing.T) {
 		t.Errorf("宣言と同じ --root を 食い違いと読んだ: %q", errOut)
 	}
 }
+
+// TC-OUT-LINT-PLATFORM-PLATFORM-DIR (check): platform_dir = "" の時 adapter_dirs の各 dir の直下に 命名と 3 file の検査を当てる。
+// adapter_dirs が無ければ 名乗って 0。platform_dir を宣言した時は 今のまま。
+func TestCheck_AdapterDirsWhenNoPlatform(t *testing.T) {
+	good := map[string]string{
+		"a/io/db-postgres-go/interface.go":    "package x\n",
+		"a/io/db-postgres-go/adapter_real.go": "package x\n",
+		"a/io/db-postgres-go/adapter_mock.go": "package x\n",
+	}
+	for _, tc := range []struct {
+		label string
+		extra map[string]string
+		drop  string
+		want  int
+		say   string
+	}{
+		{"3 file が揃う", nil, "", 0, "違反なし"},
+		{"1 つ欠ける", nil, "a/io/db-postgres-go/adapter_mock.go", 1, "違反 "},
+		{"名前が形に合わない", map[string]string{"a/io/bad_name/x.go": "package x\n"}, "", 1, "bad_name"},
+	} {
+		repo := testDir(t)
+		fs := map[string]string{"outside-platform.toml": "platform_dir = \"\"\nadapter_dirs = [\"a/io\"]\n"}
+		for k, v := range good {
+			if k != tc.drop {
+				fs[k] = v
+			}
+		}
+		for k, v := range tc.extra {
+			fs[k] = v
+		}
+		tree(t, repo, fs)
+		code, out, errOut := runCmd(t, "check", "--vocab", filepath.Join(repo, "outside-platform.toml"))
+		if code != tc.want || !strings.Contains(out+errOut, tc.say) {
+			t.Errorf("%s: exit = %d (want %d) / %q を含まない\n%s%s", tc.label, code, tc.want, tc.say, out, errOut)
+		}
+	}
+	// 読めない adapter_dirs (在らない dir) は 判定不能。
+	repo := testDir(t)
+	tree(t, repo, map[string]string{"outside-platform.toml": "platform_dir = \"\"\nadapter_dirs = [\"nope\"]\n"})
+	if code, _, _ := runCmd(t, "check", "--vocab", filepath.Join(repo, "outside-platform.toml")); code != 3 {
+		t.Errorf("在らない adapter_dirs: exit = %d (want 3)", code)
+	}
+	// platform_dir を宣言した時は adapter_dirs を check しない (今のまま)。
+	repo = testDir(t)
+	tree(t, repo, map[string]string{
+		"outside-platform.toml":            "platform_dir = \"p\"\nadapter_dirs = [\"a/io\"]\n",
+		"a/io/bad_name/x.go":               "package x\n",
+		"p/db-postgres-go/interface.go":    "package x\n",
+		"p/db-postgres-go/adapter_real.go": "package x\n",
+		"p/db-postgres-go/adapter_mock.go": "package x\n",
+	})
+	// --root を省けば 宣言の置き場 p だけを検査し adapter_dirs の a/io (名前の違反を持つ) は見ない = 0。
+	if code, out, errOut := runCmd(t, "check", "--vocab", filepath.Join(repo, "outside-platform.toml")); code != 0 || strings.Contains(out+errOut, "bad_name") {
+		t.Errorf("platform_dir 宣言時に adapter_dirs を検査した か 置き場 p を読めない: exit = %d\n%s%s", code, out, errOut)
+	}
+}
