@@ -80,9 +80,9 @@ func TestTests_TC_OUT_LINT_PLATFORM_TESTS(t *testing.T) {
 		got = append(got, line)
 	}
 	want := []string{
-		"違反 apps/mobile/test/c_test.dart: dart の integration の test は 置き場 (libs/platform/** と adapter_dirs) の外 (test-classification.md §4)",
-		"違反 apps/web/a.integration.spec.ts: ts の integration の test は 置き場 (libs/platform/** と adapter_dirs) の外 (test-classification.md §4)",
-		"違反 tools/dbgate/db_test.go: go の integration の test は 置き場 (libs/platform/** と adapter_dirs) の外 (test-classification.md §4)",
+		"違反 apps/mobile/test/c_test.dart: dart の integration の test は 置き場 (platform_dir と adapter_dirs) の外 (test-classification.md §4)",
+		"違反 apps/web/a.integration.spec.ts: ts の integration の test は 置き場 (platform_dir と adapter_dirs) の外 (test-classification.md §4)",
+		"違反 tools/dbgate/db_test.go: go の integration の test は 置き場 (platform_dir と adapter_dirs) の外 (test-classification.md §4)",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("出力 =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -212,5 +212,75 @@ func TestTests_RealUse_TC_OUT_LINT_PLATFORM_TESTS(t *testing.T) {
 	}
 	if got := strings.Split(strings.TrimSpace(out), "\n"); !slices.Equal(got, want) {
 		t.Errorf("出力 =\n%s\nwant\n%s", out, strings.Join(want, "\n"))
+	}
+}
+
+// TC-OUT-LINT-PLATFORM-PLATFORM-DIR: 宣言 platform_dir が adapters の置き場を決める。
+// 書かない = 既定 libs/platform / "" = 置き場を持たない (adapter_dirs だけ) / path = その dir。
+func TestPlatformDir_TC_OUT_LINT_PLATFORM_PLATFORM_DIR(t *testing.T) {
+	integ := "//go:build integration\n\npackage be\n"
+	files := map[string]string{
+		"libs/platform/x/be/real_test.go": integ,
+		"adapters/y/real_test.go":         integ,
+		"libs/adapters/z/real_test.go":    integ,
+	}
+	for _, tc := range []struct {
+		label    string
+		toml     string
+		wantCode int
+		wantViol []string
+	}{
+		{"書かない = 既定", "adapter_dirs = [\"adapters\"]\n", 1, []string{"libs/adapters/z/real_test.go"}},
+		{"空 = 置き場を持たない", "platform_dir = \"\"\nadapter_dirs = [\"adapters\"]\n", 1, []string{"libs/adapters/z/real_test.go", "libs/platform/x/be/real_test.go"}},
+		{"別の dir", "platform_dir = \"libs/adapters\"\nadapter_dirs = [\"adapters\"]\n", 1, []string{"libs/platform/x/be/real_test.go"}},
+	} {
+		repo := testDir(t)
+		fs := map[string]string{"outside-platform.toml": tc.toml}
+		for k, v := range files {
+			fs[k] = v
+		}
+		tree(t, repo, fs)
+		code, out, errOut := runCmd(t, "tests", "--repo", repo)
+		if code != tc.wantCode {
+			t.Errorf("%s: exit = %d (want %d)\n%s%s", tc.label, code, tc.wantCode, out, errOut)
+		}
+		for _, p := range []string{"libs/platform/x/be/real_test.go", "adapters/y/real_test.go", "libs/adapters/z/real_test.go"} {
+			want := slices.Contains(tc.wantViol, p)
+			if got := strings.Contains(out+errOut, "違反 "+p+":"); got != want {
+				t.Errorf("%s: %s の違反 = %v (want %v)\n%s%s", tc.label, p, got, want, out, errOut)
+			}
+		}
+	}
+	for _, bad := range []string{`platform_dir = "."`, `platform_dir = "../x"`, `platform_dir = "/abs"`, `platform_dir = 1`} {
+		repo := testDir(t)
+		tree(t, repo, map[string]string{"outside-platform.toml": bad + "\n"})
+		if code, _, _ := runCmd(t, "tests", "--repo", repo); code != 3 {
+			t.Errorf("宣言 %s: exit = %d (want 3)", bad, code)
+		}
+	}
+}
+
+// check: platform_dir = "" は 命名の検査をしない (名乗って 0)。宣言と違う --root は 判定不能。scaffold は 置き場が無ければ 3。
+func TestCheck_PlatformDir(t *testing.T) {
+	repo := testDir(t)
+	tree(t, repo, map[string]string{
+		"libs/platform/anything-goes/x.txt": "x",
+		"outside-platform.toml":             "platform_dir = \"\"\n",
+	})
+	vocab := filepath.Join(repo, "outside-platform.toml")
+	code, out, _ := runCmd(t, "check", "--vocab", vocab)
+	if code != 0 || !strings.Contains(out, "命名の検査はしない") {
+		t.Errorf("platform_dir = \"\" の check: exit = %d out = %q (want 0 と 名乗り)", code, out)
+	}
+	if code, _, errOut := runCmd(t, "check", "--root", "libs/platform", "--vocab", vocab); code != 3 || !strings.Contains(errOut, "違う") {
+		t.Errorf("宣言と違う --root: exit = %d err = %q (want 3)", code, errOut)
+	}
+	if code, _, _ := runCmd(t, "scaffold", "--vocab", vocab, "db", "postgres", "go"); code != 3 {
+		t.Errorf("置き場を持たない scaffold (--root なし): exit = %d (want 3)", code)
+	}
+	// 宣言で書いた置き場と同じ --root は 食い違いにならない (置き場が無いので 読めない = 3 だが 食い違いの名乗りではない)。
+	tree(t, repo, map[string]string{"outside-platform.toml": "platform_dir = \"libs/adapters\"\n"})
+	if _, _, errOut := runCmd(t, "check", "--root", "libs/adapters", "--vocab", vocab); strings.Contains(errOut, "違う") {
+		t.Errorf("宣言と同じ --root を 食い違いと読んだ: %q", errOut)
 	}
 }

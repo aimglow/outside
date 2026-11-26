@@ -1,12 +1,16 @@
 // Command lint-platform は adapters 層 (各 project の libs/platform) の 名前と構成を検査し 雛形を作る。
 //
-//	check    --root libs/platform [--vocab outside-platform.toml]
-//	scaffold --root libs/platform [--vocab outside-platform.toml] <機能> <依存先> <runtime>
+//	check    [--root <adapters の置き場>] [--vocab outside-platform.toml]
+//	scaffold [--root <adapters の置き場>] [--vocab outside-platform.toml] <機能> <依存先> <runtime>
+//
+// adapters の置き場 = 宣言 platform_dir (書かなければ libs/platform、"" なら 置き場を持たない)。--root を省けば それを使う
+// (repo の根で撃つ)。platform_dir を書いた宣言で --root が それと違えば 判定不能 (3)。置き場を持たない宣言の check は 検査せずに名乗って 0。
+//
 //	tests    --repo <repo の根> [--vocab <repo の根>/outside-platform.toml]
 //
 // exit = 0 違反なし (警告は出すが止めない) / 1 違反あり・作れない名前 / 3 読めない (判定不能)。
 // --vocab の file が無ければ 宣言なし (共通の語だけ・adapter_dirs なし) で検査する (在るのに読めない時は 3)。
-// tests は 置き場 (libs/platform/** と adapter_dirs) の外に integration の印を持つ test か 本物の口を使う test が在れば落とす (lint.platform.tests)。
+// tests は 置き場 (platform_dir と adapter_dirs) の外に integration の印を持つ test か 本物の口を使う test が在れば落とす (lint.platform.tests)。
 package main
 
 import (
@@ -52,15 +56,30 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		return tests(*repo, d.place, stdout, stderr)
 	}
-	root := fl.String("root", "", "adapters 層の dir (例 libs/platform)")
-	vocabPath := fl.String("vocab", "outside-platform.toml", "project の宣言 (capabilities・adapter_dirs)")
-	if err := fl.Parse(args[1:]); err != nil || *root == "" {
-		fmt.Fprintln(stderr, "lint-platform: --root が要る")
+	root := fl.String("root", "", "adapters 層の dir (省けば 宣言 platform_dir。既定 libs/platform)")
+	vocabPath := fl.String("vocab", "outside-platform.toml", "project の宣言 (capabilities・adapter_dirs・platform_dir)")
+	if err := fl.Parse(args[1:]); err != nil {
+		fmt.Fprintln(stderr, "lint-platform: 引数が読めない")
 		return 3
 	}
 	d, err := loadDecl(*vocabPath)
 	if err != nil {
 		fmt.Fprintf(stderr, "lint-platform: 宣言 %s を使えない (判定不能): %v\n", *vocabPath, err)
+		return 3
+	}
+	pdir, declared := d.place.PlatformDir()
+	switch {
+	case *root == "" && pdir == "":
+		if args[0] == "scaffold" {
+			fmt.Fprintln(stderr, "lint-platform scaffold: adapters の置き場を持たない宣言 (platform_dir = \"\") = --root で作る dir を指す")
+			return 3
+		}
+		fmt.Fprintf(stdout, "lint-platform check: adapters の置き場を持たない宣言 (platform_dir = \"\") = 命名の検査はしない (置き場 = %s)\n", d.place.Places())
+		return 0
+	case *root == "":
+		*root = pdir
+	case declared && filepath.ToSlash(filepath.Clean(*root)) != pdir:
+		fmt.Fprintf(stderr, "lint-platform: --root %s と 宣言 platform_dir %q が違う (判定不能。--root を省くか 宣言に合わせる)\n", *root, pdir)
 		return 3
 	}
 	if args[0] == "scaffold" {
@@ -69,10 +88,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return check(*root, d.vocab, stdout, stderr)
 }
 
-// vocabFile は outside-platform.toml の形。書けるのは capabilities と adapter_dirs だけ。
+// vocabFile は outside-platform.toml の形。書けるのは capabilities・adapter_dirs・platform_dir だけ。
 type vocabFile struct {
 	Capabilities []string `toml:"capabilities"`
 	AdapterDirs  []string `toml:"adapter_dirs"`
+	PlatformDir  *string  `toml:"platform_dir"`
 }
 
 // decl は 宣言を確かめた後の値 (check・scaffold は vocab、tests は place を使う)。
@@ -95,14 +115,14 @@ func loadDecl(path string) (decl, error) {
 			return decl{}, err
 		}
 		if un := md.Undecoded(); len(un) > 0 {
-			return decl{}, fmt.Errorf("知らない key %v (書けるのは capabilities と adapter_dirs だけ)", un)
+			return decl{}, fmt.Errorf("知らない key %v (書けるのは capabilities・adapter_dirs・platform_dir だけ)", un)
 		}
 	}
 	v, err := naming.NewVocab(vf.Capabilities)
 	if err != nil {
 		return decl{}, err
 	}
-	p, err := placement.NewDecl(vf.AdapterDirs)
+	p, err := placement.NewDecl(vf.AdapterDirs, vf.PlatformDir)
 	if err != nil {
 		return decl{}, err
 	}
@@ -222,7 +242,7 @@ func tests(repo string, d placement.Decl, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "lint-platform tests: 違反 %d 件\n", len(r.Violations))
 		return 1
 	}
-	fmt.Fprintf(stdout, "lint-platform tests: %s の 読んだ file %d 件 違反なし (置き場 = libs/platform/** と adapter_dirs %v)\n", repo, len(files), d.AdapterDirs())
+	fmt.Fprintf(stdout, "lint-platform tests: %s の 読んだ file %d 件 違反なし (置き場 = %s)\n", repo, len(files), d.Places())
 	return 0
 }
 

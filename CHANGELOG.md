@@ -271,3 +271,12 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 - docs: operations.md に §7『取り込みの教訓』を足した (取り込みを済ませた project の完了の証跡から一般化。口の組を固めて 1.0.0 にしてから取り込む・docs と実物の一致を test で止める・push と審査は区切りで 1 回・段を足す前の 3 問・合流後の木で回す段・置き場を審査役に結ぶ・差し戻しの型・合格の確かめ)。
 - docs: §6 の 5 (最終の確かめ) を実測に合わせた: 1 回目に回る段は 組込の go test だけで その中で実行される package は 0、2 回目は 回った段 0。
 - 利用する側がやる事: docs/v0.12.0 を取り込む。§6 の 5 の確かめ方が変わった。
+
+## lint-platform/v0.4.0・docs/v0.13.0 (2026-11-26)
+
+- lint-platform: 宣言 `platform_dir` (outside-platform.toml) を足した。adapters の置き場を決める: 書かない = `libs/platform` (今の振る舞いのまま) / `""` = 置き場を持たない (`adapter_dirs` だけで決める) / path = その dir (`.`・根の外・絶対 path は 判定不能)。repo で `libs/platform` が adapters でない用途の時に使う。
+  - tests: 置き場 = platform_dir の下 と adapter_dirs。
+  - check・scaffold: `--root` を省けば platform_dir を使う (repo の根で撃つ)。宣言と違う `--root` は 判定不能 (3)。`""` の check は 命名の検査をせず 名乗って 0、`""` の scaffold は `--root` が要る (3)。
+  - 前の版の lint-platform は platform_dir を知らない key として 判定不能にする = 宣言は v0.4.0 を取り込んでから。
+- docs: enforcement.md §4.1・§4.2 に platform_dir を書いた。
+- 利用する側がやる事: 足すだけ (宣言を書かなければ 今のまま)。libs/platform を adapters に使わない repo は platform_dir = "" と adapter_dirs を書き、check の段の `--root` を省く。

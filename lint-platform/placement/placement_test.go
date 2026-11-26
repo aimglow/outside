@@ -7,7 +7,7 @@ import (
 
 func decl(t *testing.T, dirs ...string) Decl {
 	t.Helper()
-	d, err := NewDecl(dirs)
+	d, err := NewDecl(dirs, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestCheck_TC_OUT_LINT_PLATFORM_TESTS(t *testing.T) {
 	if !reflect.DeepEqual(r.Violations, want) || len(r.Unknowns) != 0 {
 		t.Errorf("違反 = %v 判定不能 = %v\nwant %v", r.Violations, r.Unknowns, want)
 	}
-	if got := r.Violations[2].String(); got != "tools/dbgate/db_test.go: go の integration の test は 置き場 (libs/platform/** と adapter_dirs) の外 (test-classification.md §4)" {
+	if got := r.Violations[2].String(); got != "tools/dbgate/db_test.go: go の integration の test は 置き場 (platform_dir と adapter_dirs) の外 (test-classification.md §4)" {
 		t.Errorf("名指しの文 = %q", got)
 	}
 }
@@ -87,11 +87,11 @@ func TestSkipDir(t *testing.T) {
 // 宣言の誤り (空・.・絶対 path・根の外) は 判定不能。
 func TestNewDecl_Invalid(t *testing.T) {
 	for _, d := range []string{"", " ", ".", "./", "/abs/dir", "..", "../x", "a/../..", "tools/../."} {
-		if _, err := NewDecl([]string{d}); err == nil {
+		if _, err := NewDecl([]string{d}, nil); err == nil {
 			t.Errorf("宣言 %q が通った", d)
 		}
 	}
-	if _, err := NewDecl(nil); err != nil {
+	if _, err := NewDecl(nil, nil); err != nil {
 		t.Errorf("宣言なし = %v", err)
 	}
 }

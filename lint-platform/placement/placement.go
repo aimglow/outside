@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-// PlatformDir は 全 project 共通の 置いてよい場所 (adapters 層)。
+// PlatformDir は adapters 層の 既定の置き場 (宣言 platform_dir を書かない時)。
 const PlatformDir = "libs/platform"
 
 // OutsideDir は 取り込んだ outside の写し。部品の test は写さないので 歩かない。
@@ -26,33 +26,87 @@ var SkipDirNames = []string{".git", "node_modules", ".dart_tool"}
 // maxGoTags は //go:build の式の tag の数の上限。超えたら 組み合わせを数え切らず 判定不能にする。
 const maxGoTags = 16
 
-// Decl は project の宣言 (outside-platform.toml の adapter_dirs)。値は 確かめて揃えた形 (repo の根からの相対 path・区切りは /)。
-type Decl struct{ adapterDirs []string }
+// Decl は project の宣言 (outside-platform.toml の platform_dir と adapter_dirs)。値は 確かめて揃えた形 (repo の根からの相対 path・区切りは /)。
+type Decl struct {
+	adapterDirs []string
+	// platformDir は 宣言で書いた adapters 層の置き場 (空 = 書いていない か 置き場を持たない。noPlatform で分ける)。
+	// 空の値の Decl は 既定 (libs/platform) と同じ。
+	platformDir string
+	// noPlatform は platform_dir = "" (置き場を持たない = adapter_dirs だけで決める)。
+	noPlatform bool
+	// platformDeclared は platform_dir を宣言で書いたか (書かなければ 既定 libs/platform)。
+	platformDeclared bool
+}
 
-// NewDecl は adapter_dirs を確かめて揃える。空・.・絶対 path・根の外 (..) は 宣言できない (誤り = 判定不能)。
-func NewDecl(dirs []string) (Decl, error) {
+// cleanDir は 宣言の dir を確かめて揃える。空・.・絶対 path・根の外 (..) は 宣言できない (誤り = 判定不能)。
+func cleanDir(key, d string) (string, error) {
+	if strings.TrimSpace(d) == "" {
+		return "", fmt.Errorf("%s に 空の path は書けない", key)
+	}
+	s := filepath.ToSlash(d)
+	if path.IsAbs(s) || filepath.IsAbs(d) || filepath.VolumeName(d) != "" {
+		return "", fmt.Errorf("%s の %q は 絶対 path (repo の根からの相対 path で書く)", key, d)
+	}
+	c := path.Clean(s)
+	if c == "." {
+		return "", fmt.Errorf("%s の %q は repo の根そのもの (根を宣言すると 全部が置き場になる)", key, d)
+	}
+	if c == ".." || strings.HasPrefix(c, "../") {
+		return "", fmt.Errorf("%s の %q は repo の根の外", key, d)
+	}
+	return c, nil
+}
+
+// NewDecl は adapter_dirs と platform_dir を確かめて揃える。platformDir が nil なら 既定 (libs/platform)、
+// 空の文字なら 置き場を持たない (adapter_dirs だけ)、それ以外は repo の根からの相対 path (adapter_dirs と同じ確かめ)。
+func NewDecl(dirs []string, platformDir *string) (Decl, error) {
 	var out []string
 	for _, d := range dirs {
-		if strings.TrimSpace(d) == "" {
-			return Decl{}, errors.New("adapter_dirs に 空の path は書けない")
-		}
-		s := filepath.ToSlash(d)
-		if path.IsAbs(s) || filepath.IsAbs(d) || filepath.VolumeName(d) != "" {
-			return Decl{}, fmt.Errorf("adapter_dirs の %q は 絶対 path (repo の根からの相対 path で書く)", d)
-		}
-		c := path.Clean(s)
-		if c == "." {
-			return Decl{}, fmt.Errorf("adapter_dirs の %q は repo の根そのもの (根を宣言すると 全部が置き場になる)", d)
-		}
-		if c == ".." || strings.HasPrefix(c, "../") {
-			return Decl{}, fmt.Errorf("adapter_dirs の %q は repo の根の外", d)
+		c, err := cleanDir("adapter_dirs", d)
+		if err != nil {
+			return Decl{}, err
 		}
 		if !slices.Contains(out, c) {
 			out = append(out, c)
 		}
 	}
 	slices.Sort(out)
-	return Decl{adapterDirs: out}, nil
+	decl := Decl{adapterDirs: out}
+	if platformDir != nil {
+		decl.platformDeclared = true
+		decl.noPlatform = *platformDir == ""
+		if *platformDir != "" {
+			c, err := cleanDir("platform_dir", *platformDir)
+			if err != nil {
+				return Decl{}, err
+			}
+			decl.platformDir = c
+		}
+	}
+	return decl, nil
+}
+
+// PlatformDir は adapters 層の置き場 (空 = 持たない) と それを宣言で書いたかを返す。
+func (d Decl) PlatformDir() (dir string, declared bool) { return d.dir(), d.platformDeclared }
+
+// dir は 置き場 (空 = 持たない)。
+func (d Decl) dir() string {
+	switch {
+	case d.noPlatform:
+		return ""
+	case d.platformDir == "":
+		return PlatformDir
+	default:
+		return d.platformDir
+	}
+}
+
+// Places は 置いてよい場所の名乗り (出力の文に使う)。
+func (d Decl) Places() string {
+	if d.dir() == "" {
+		return fmt.Sprintf("adapter_dirs %v", d.adapterDirs)
+	}
+	return fmt.Sprintf("%s/** と adapter_dirs %v", d.dir(), d.adapterDirs)
 }
 
 // AdapterDirs は 揃えた宣言の写し。
@@ -63,9 +117,9 @@ func under(rel, dir string) bool {
 	return rel == dir || strings.HasPrefix(rel, dir+"/")
 }
 
-// Allowed は rel (repo の根からの相対 path・区切りは /) が 置いてよい場所 (libs/platform/** と adapter_dirs) の中か。
+// Allowed は rel (repo の根からの相対 path・区切りは /) が 置いてよい場所 (platform_dir/** と adapter_dirs) の中か。
 func Allowed(rel string, d Decl) bool {
-	if under(rel, PlatformDir) {
+	if pd := d.dir(); pd != "" && under(rel, pd) {
 		return true
 	}
 	for _, a := range d.adapterDirs {
@@ -218,7 +272,7 @@ type Finding struct {
 
 func (f Finding) String() string {
 	if f.Name == "" {
-		return f.Path + ": " + f.Runtime + " の integration の test は 置き場 (libs/platform/** と adapter_dirs) の外 (test-classification.md §4)"
+		return f.Path + ": " + f.Runtime + " の integration の test は 置き場 (platform_dir と adapter_dirs) の外 (test-classification.md §4)"
 	}
 	return fmt.Sprintf("%s:%d: %s の test が 本物の口 %s を使う (置き場の外。test-classification.md §4)", f.Path, f.Line, f.Runtime, f.Name)
 }
