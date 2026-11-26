@@ -79,6 +79,7 @@ outside repo (github.com/aimglow/outside、編集するのは outside 門番だ�
 目的 = test の結果を 入力だけで決まる形にし cache を効かせて 同じ入力の test を二度回さない (build の slot の無駄な詰まりを減らす) こと と、壊れた code で必ず落ちる test だけを残して 品質を担保すること。
 
 1. `outside` の部品を `scripts/sync-outside.sh` で repo の中に置いている (その project の stack の部品と docs)。置いた写しは編集しない。
+   product が 設計の repo と 実装の repo に分かれ 実装の repo に `docs/` を置かない決まりなら 次の 3 つで満たす: ①docs の部品は 設計の repo に置き その repo の push の前の段で `sync-outside.sh --check docs` を回す ②実装の repo の CLAUDE.md (seat に必ず届く入口) から 設計の repo の `docs/deterministic-testing/` を必読として指す (path か URL で 実装の seat が開ける形) ③code の部品 (go・next・angular・flutter・lint-*) は 実装の repo に置き そこで `--check` を回す。
 2. 外を直に呼ぶ code が `libs/outside`・`libs/platform/*` の real・入口の `main` にしか無い = lint-go・lint-ts・lint-dart (その project の stack の分) の違反 0。Nx の `layer:` 境界の違反 0。
 3. `libs/platform` が lint-platform の check に通る (push の前の検査の段として宣言)。依存先に固有の取り決めを読む物は lib、起こして終了コードを見るだけの物は `outside` の子 process の口。
 4. test が ccark の `docs/conventions/test-writing.md` に合う: §6 の 4 条件 (段 `testguard-writing`・既存の違反の棚卸し・外の入力の宣言 (Nx の task の inputs を含む)・陽性対照) を満たし、app と tool の test は mock だけ、実物に触れる test は `libs/platform` の結合 test (tag `integration`) だけ、分類 C (test-classification.md §1) は消す。

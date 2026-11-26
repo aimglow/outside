@@ -286,3 +286,8 @@ exit = 0 違反なし / 1 違反あり / 3 読めない (判定不能)。
 - docs: enforcement.md §4.1・§4.2 に platform_dir (adapters の置き場の宣言) を書いた。設計書の lint.platform.tests と テスト仕様 TC-OUT-LINT-PLATFORM-PLATFORM-DIR も同じ形に。
 - 利用する側がやる事: docs/v0.13.0 を取り込んだ project は docs/v0.13.1 へ (v0.13.0 は v0.12.0 と同じ中身)。
 
+
+## docs/v0.14.0 (2026-11-26)
+
+- docs: operations.md §6 の 1 に 設計の repo と実装の repo に分かれた product の形を足した (docs の部品は設計の repo に置き --check を回し、実装の repo の CLAUDE.md から必読として指し、code の部品は実装の repo に置く)。yaoyorozu の問い。
+- 利用する側がやる事: docs/v0.14.0 を取り込む。分かれた repo の product は この形で §6 の 1 を満たす。
